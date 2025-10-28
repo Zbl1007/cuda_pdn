@@ -23,7 +23,7 @@ setup(
         ),
         CUDAExtension(
             'ac_sim_cuda_cpp',
-            ['ac_sim_cuda.cpp',],
+            ['ac_sim_cuda.cu',],
         # 添加 CUDA 库的路径
         library_dirs=[os.path.join('/usr/local/cuda', 'lib64')],
         # 添加需要链接的库

@@ -92,18 +92,18 @@ void initTriplets(std::vector<Triplet> &ts, size_t m, const int *typs,
     if (v >= 0)
       ts.push_back({v, i + num_nonzero_nodes, -1.});
   }
-  for (size_t i = 0; i < ts.size(); i++)
-  {
-    /* code */
-    std::cout<<ts[i].row<<"  "<<ts[i].col<<"  "<<ts[i].val.real()<<"  "<<ts[i].val.imag()<<std::endl;
-  }
+  // for (size_t i = 0; i < ts.size(); i++)
+  // {
+  //   /* code */
+  //   std::cout<<ts[i].row<<"  "<<ts[i].col<<"  "<<ts[i].val.real()<<"  "<<ts[i].val.imag()<<std::endl;
+  // }
   coalesce(ts);
-  for (size_t i = 0; i < ts.size(); i++)
-  {
-    /* code */
-    std::cout<<ts[i].row<<"  "<<ts[i].col<<"  "<<ts[i].val.real()<<"  "<<ts[i].val.imag()<<std::endl;
-  }
-  std::cout<<std::endl;
+  // for (size_t i = 0; i < ts.size(); i++)
+  // {
+  //   /* code */
+  //   std::cout<<ts[i].row<<"  "<<ts[i].col<<"  "<<ts[i].val.real()<<"  "<<ts[i].val.imag()<<std::endl;
+  // }
+  // std::cout<<std::endl;
 }
 
 void initRhs(std::vector<std::complex<double>> &rhs, size_t m, const int *typs,

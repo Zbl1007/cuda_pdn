@@ -306,7 +306,7 @@ void initTripletsGPU_thrust(
         h_maxnode = max(max_u, max_v);
     }
     
-    int threads = 256;
+    int threads = 1024;
     int blocks = (m + threads - 1)/threads;
 
     // ---------------------------------------------------
@@ -963,7 +963,7 @@ void acCuDssHandleSolve(AcCuDssHandle &h) {
     // // }
 
     // --- 1. 定义 CUDA Kernel 的启动配置 ---
-    int threads_per_block = 512;
+    int threads_per_block = 1024;
     // RHS kernel 需要清零和原子加，网格大小可以设置得大一些以保证并行度
     int blocks_per_grid = (h.m + threads_per_block - 1) / threads_per_block;
     // --- 2. 启动 Kernel 直接在 GPU 上更新 RHS 向量 ---
