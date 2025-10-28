@@ -1,0 +1,162 @@
+dtcs:
+- !!python/tuple
+  - 49
+  - 1
+- !!python/tuple
+  - 29
+  - 40
+- !!python/tuple
+  - 23
+  - 51
+- !!python/tuple
+  - 19
+  - 29
+- !!python/tuple
+  - 10
+  - 52
+- !!python/tuple
+  - 15
+  - 5
+- !!python/tuple
+  - 23
+  - 36
+- !!python/tuple
+  - 7
+  - 7
+- !!python/tuple
+  - 6
+  - 27
+- !!python/tuple
+  - 26
+  - 40
+- !!python/tuple
+  - 6
+  - 44
+- !!python/tuple
+  - 25
+  - 12
+ga_params:
+  best_n_no_ok: !!python/object/apply:numpy.core.multiarray.scalar
+  - !!python/object/apply:numpy.dtype
+    args:
+    - i8
+    - false
+    - true
+    state: !!python/tuple
+    - 3
+    - <
+    - null
+    - null
+    - null
+    - -1
+    - -1
+    - 0
+  - !!binary |
+    AAAAAAAAAAA=
+  case: multigpu
+  crossover_rate: 0.9
+  mutation_rate: 0.1
+  num_decaps_selected: 12
+  num_generations: 40
+  population_size: 50
+  total_ga_time_sec: 91.70510411262512
+tsvs:
+- !!python/tuple
+  - 10
+  - 30
+- !!python/tuple
+  - 40
+  - 3
+- !!python/tuple
+  - 20
+  - 28
+- !!python/tuple
+  - 12
+  - 16
+- !!python/tuple
+  - 24
+  - 43
+- !!python/tuple
+  - 31
+  - 34
+- !!python/tuple
+  - 24
+  - 31
+- !!python/tuple
+  - 34
+  - 12
+- !!python/tuple
+  - 11
+  - 34
+- !!python/tuple
+  - 34
+  - 21
+- !!python/tuple
+  - 47
+  - 39
+- !!python/tuple
+  - 9
+  - 13
+- !!python/tuple
+  - 39
+  - 29
+- !!python/tuple
+  - 43
+  - 16
+- !!python/tuple
+  - 29
+  - 18
+- !!python/tuple
+  - 7
+  - 23
+- !!python/tuple
+  - 20
+  - 21
+- !!python/tuple
+  - 14
+  - 23
+- !!python/tuple
+  - 1
+  - 30
+- !!python/tuple
+  - 15
+  - 17
+- !!python/tuple
+  - 36
+  - 21
+- !!python/tuple
+  - 45
+  - 22
+- !!python/tuple
+  - 17
+  - 36
+- !!python/tuple
+  - 38
+  - 28
+- !!python/tuple
+  - 29
+  - 26
+- !!python/tuple
+  - 17
+  - 12
+- !!python/tuple
+  - 25
+  - 40
+- !!python/tuple
+  - 42
+  - 21
+- !!python/tuple
+  - 8
+  - 23
+- !!python/tuple
+  - 45
+  - 14
+- !!python/tuple
+  - 21
+  - 18
+- !!python/tuple
+  - 37
+  - 5
+- !!python/tuple
+  - 5
+  - 17

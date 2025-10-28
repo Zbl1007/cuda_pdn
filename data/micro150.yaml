@@ -1,0 +1,53 @@
+vdd: 1
+interposer:
+  w: 50
+  h: 50
+chiplets:
+  - w: 8
+    h: 9
+    x: 5
+    y: 14
+    power: 1.5
+    freq: 5.0e+9
+  - w: 8
+    h: 9
+    x: 15
+    y: 14
+    power: 1.5
+    freq: 5.0e+9
+  - w: 8
+    h: 9
+    x: 5
+    y: 24
+    power: 1.5
+    freq: 5.0e+9
+  - w: 8
+    h: 9
+    x: 15
+    y: 24
+    power: 1.5
+    freq: 5.0e+9
+  - w: 9
+    h: 9
+    x: 4
+    y: 4
+    power: 0.2
+    freq: 2.4e+9
+  - w: 9
+    h: 9
+    x: 15
+    y: 4
+    power: 0.2
+    freq: 2.4e+9
+  - w: 9
+    h: 9
+    x: 4
+    y: 34
+    power: 0.2
+    freq: 2.4e+9
+  - w: 9
+    h: 9
+    x: 15
+    y: 34
+    power: 0.2
+    freq: 2.4e+9

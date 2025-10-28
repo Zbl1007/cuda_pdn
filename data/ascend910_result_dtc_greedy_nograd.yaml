@@ -1,0 +1,47 @@
+dtcs:
+- !!python/tuple
+  - 5
+  - 13
+tsvs:
+- !!python/tuple
+  - 36
+  - 5
+- !!python/tuple
+  - 23
+  - 23
+- !!python/tuple
+  - 12
+  - 5
+- !!python/tuple
+  - 33
+  - 20
+- !!python/tuple
+  - 15
+  - 14
+- !!python/tuple
+  - 22
+  - 21
+- !!python/tuple
+  - 43
+  - 30
+- !!python/tuple
+  - 26
+  - 19
+- !!python/tuple
+  - 9
+  - 29
+- !!python/tuple
+  - 29
+  - 17
+- !!python/tuple
+  - 32
+  - 33
+- !!python/tuple
+  - 15
+  - 25
+- !!python/tuple
+  - 11
+  - 18
+- !!python/tuple
+  - 7
+  - 22

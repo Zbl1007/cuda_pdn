@@ -1,0 +1,62 @@
+dtcs:
+- !!python/tuple
+  - 6
+  - 32
+- !!python/tuple
+  - 2
+  - 42
+- !!python/tuple
+  - 23
+  - 7
+- !!python/tuple
+  - 7
+  - 17
+- !!python/tuple
+  - 22
+  - 35
+- !!python/tuple
+  - 10
+  - 19
+- !!python/tuple
+  - 11
+  - 16
+- !!python/tuple
+  - 12
+  - 42
+- !!python/tuple
+  - 12
+  - 5
+- !!python/tuple
+  - 5
+  - 28
+- !!python/tuple
+  - 26
+  - 2
+- !!python/tuple
+  - 15
+  - 34
+ga_params:
+  best_n_no_ok: !!python/object/apply:numpy.core.multiarray.scalar
+  - !!python/object/apply:numpy.dtype
+    args:
+    - i8
+    - false
+    - true
+    state: !!python/tuple
+    - 3
+    - <
+    - null
+    - null
+    - null
+    - -1
+    - -1
+    - 0
+  - !!binary |
+    AAAAAAAAAAA=
+  case: micro150
+  crossover_rate: 0.9
+  mutation_rate: 0.1
+  num_decaps_selected: 12
+  num_generations: 40
+  population_size: 50
+  total_ga_time_sec: 204.747789144516

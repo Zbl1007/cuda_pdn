@@ -1,0 +1,97 @@
+dtcs:
+- !!python/tuple
+  - 7
+  - 11
+- !!python/tuple
+  - 6
+  - 9
+- !!python/tuple
+  - 15
+  - 0
+- !!python/tuple
+  - 2
+  - 6
+- !!python/tuple
+  - 10
+  - 11
+- !!python/tuple
+  - 17
+  - 11
+- !!python/tuple
+  - 10
+  - 5
+- !!python/tuple
+  - 18
+  - 1
+- !!python/tuple
+  - 13
+  - 3
+- !!python/tuple
+  - 9
+  - 1
+- !!python/tuple
+  - 16
+  - 0
+- !!python/tuple
+  - 11
+  - 2
+- !!python/tuple
+  - 1
+  - 5
+- !!python/tuple
+  - 14
+  - 1
+- !!python/tuple
+  - 15
+  - 2
+- !!python/tuple
+  - 19
+  - 1
+- !!python/tuple
+  - 11
+  - 0
+- !!python/tuple
+  - 17
+  - 0
+- !!python/tuple
+  - 18
+  - 2
+- !!python/tuple
+  - 8
+  - 0
+- !!python/tuple
+  - 16
+  - 2
+- !!python/tuple
+  - 18
+  - 4
+- !!python/tuple
+  - 13
+  - 14
+- !!python/tuple
+  - 7
+  - 9
+- !!python/tuple
+  - 4
+  - 1
+- !!python/tuple
+  - 8
+  - 2
+- !!python/tuple
+  - 10
+  - 3
+- !!python/tuple
+  - 12
+  - 0
+- !!python/tuple
+  - 18
+  - 12
+ga_params:
+  CROSSOVER_RATE: 0.9
+  MUTATION_RATE: 0.1
+  NUM_GENERATIONS: 40
+  POPULATION_SIZE: 50
+  best_n_no_ok: 0
+  optimal_Nd: 29
+  paper_X_rate: 0.5
+  total_search_time_sec: 2640.2191729545593

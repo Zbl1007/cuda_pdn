@@ -1,0 +1,89 @@
+dtcs:
+- !!python/tuple
+  - 19
+  - 0
+- !!python/tuple
+  - 17
+  - 0
+- !!python/tuple
+  - 5
+  - 14
+- !!python/tuple
+  - 8
+  - 9
+- !!python/tuple
+  - 16
+  - 0
+- !!python/tuple
+  - 4
+  - 1
+- !!python/tuple
+  - 7
+  - 11
+- !!python/tuple
+  - 10
+  - 0
+- !!python/tuple
+  - 18
+  - 0
+- !!python/tuple
+  - 8
+  - 1
+- !!python/tuple
+  - 19
+  - 1
+- !!python/tuple
+  - 19
+  - 14
+- !!python/tuple
+  - 5
+  - 6
+- !!python/tuple
+  - 9
+  - 0
+- !!python/tuple
+  - 14
+  - 0
+- !!python/tuple
+  - 7
+  - 10
+- !!python/tuple
+  - 15
+  - 0
+- !!python/tuple
+  - 9
+  - 12
+- !!python/tuple
+  - 5
+  - 8
+- !!python/tuple
+  - 4
+  - 9
+- !!python/tuple
+  - 11
+  - 0
+- !!python/tuple
+  - 4
+  - 4
+tsvs:
+- !!python/tuple
+  - 3
+  - 12
+- !!python/tuple
+  - 4
+  - 8
+- !!python/tuple
+  - 5
+  - 5
+- !!python/tuple
+  - 2
+  - 5
+- !!python/tuple
+  - 11
+  - 3
+- !!python/tuple
+  - 15
+  - 7
+- !!python/tuple
+  - 12
+  - 13
