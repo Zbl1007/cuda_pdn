@@ -530,11 +530,11 @@ __global__ void update_rhs_kernel(
     int num_nonzero_nodes,                // 非零节点数
     int num_v_sources                     // 电压源数量
 ) {
-    // 首先将向量清零
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < n; i += blockDim.x * gridDim.x) {
-        d_b[i] = make_cuDoubleComplex(0.0, 0.0);
-    }
-    __syncthreads(); // 确保所有线程都完成了清零
+    // // 首先将向量清零
+    // for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < n; i += blockDim.x * gridDim.x) {
+    //     d_b[i] = make_cuDoubleComplex(0.0, 0.0);
+    // }
+    // __syncthreads(); // 确保所有线程都完成了清零
 
     // 每个线程处理一个 branch
     int branch_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -808,6 +808,7 @@ void acCuDssHandleInit(AcCuDssHandle &h, const at::Tensor &branch_typ,
   CUDSS_CHECK(cudssMatrixCreateCsr(&h.matA, h.n, h.n, h.nnz, h.d_ia, NULL, h.d_ja, h.d_a, CUDA_R_32I, CUDA_C_64F, CUDSS_MTYPE_SYMMETRIC, CUDSS_MVIEW_UPPER,CUDSS_BASE_ZERO));
   CUDSS_CHECK(cudssMatrixCreateDn(&h.vecB, h.n, 1, h.n, h.d_b, CUDA_C_64F, CUDSS_LAYOUT_COL_MAJOR));
   CUDSS_CHECK(cudssMatrixCreateDn(&h.vecX, h.n, 1, h.n, h.d_x, CUDA_C_64F, CUDSS_LAYOUT_COL_MAJOR));
+
   // --- 执行分析阶段 ---
   CUDSS_CHECK(cudssExecute(h.handle, CUDSS_PHASE_ANALYSIS, h.config, h.data, h.matA, h.vecX, h.vecB));
   // 【新增】保存 RHS Kernel 需要的参数
@@ -931,6 +932,7 @@ void acCuDssHandleFactorize(AcCuDssHandle &h,
     // CUDA_CHECK(cudaGetLastError()); // 检查 Kernel 启动是否有错
     // --- 3. 调用 cuDSS Factorization ---
     CUDSS_CHECK(cudssExecute(h.handle, CUDSS_PHASE_FACTORIZATION, h.config, h.data, h.matA, h.vecX, h.vecB));
+
     // CUDSS_CHECK(cudssExecute(h.handle, CUDSS_PHASE_FACTORIZATION, h.config, h.data, h.matA, h.vecX, h.vecB));
 }
 
@@ -967,6 +969,7 @@ void acCuDssHandleSolve(AcCuDssHandle &h) {
     // RHS kernel 需要清零和原子加，网格大小可以设置得大一些以保证并行度
     int blocks_per_grid = (h.m + threads_per_block - 1) / threads_per_block;
     // --- 2. 启动 Kernel 直接在 GPU 上更新 RHS 向量 ---
+    CUDA_CHECK(cudaMemset(h.d_b, 0, h.n * sizeof(cuDoubleComplex)));
     update_rhs_kernel<<<blocks_per_grid, threads_per_block>>>(
         h.d_b,
         h.n,
@@ -978,7 +981,45 @@ void acCuDssHandleSolve(AcCuDssHandle &h) {
         h.num_nonzero_nodes,
         h.num_v_sources
     );
+    cudaDeviceSynchronize();
     CUDA_CHECK(cudaGetLastError());
+
+    // // ==============================================================
+    // // =============         调试代码开始           =================
+    // // ==============================================================
+
+    // // 1. 在 CPU (Host) 上创建一个 std::vector 来接收数据
+    // std::vector<cuDoubleComplex> h_b_debug_vector(h.n);
+
+    // // 2. 将数据从 GPU (h.d_b) 拷贝到 CPU (h_b_debug_vector)
+    // CUDA_CHECK(cudaMemcpy(h_b_debug_vector.data(),    // 目标 (CPU)
+    //                       h.d_b,                      // 源 (GPU)
+    //                       h.n * sizeof(cuDoubleComplex), // 拷贝的字节数
+    //                       cudaMemcpyDeviceToHost));   // 拷贝方向：Device -> Host
+
+    // // 3. 打印一些值来检查
+    // std::cout << "--- [DEBUG] 检查 RHS (b 向量) ---" << std::endl;
+    // std::cout << h.n << std::endl;
+    // int print_count = (h.n > 100000) ? 10000 : h.n; // 最多打印前 20 个
+    // double norm_b = 0.0; // 计算 L2 范数，这是最好的检查方法
+
+    // for (int i = 0; i < h.n; ++i) {
+    //     cuDoubleComplex val = h_b_debug_vector[i];
+    //     if (i < print_count) {
+    //         std::cout << "h.d_b[" << i << "] = (" << val.x << ", " << val.y << "j)" << std::endl;
+    //     }
+    //     norm_b += val.x * val.x + val.y * val.y;
+    // }
+    
+    // norm_b = std::sqrt(norm_b);
+    // std::cout << "RHS (b 向量) 的 L2 范数: " << norm_b << std::endl;
+    // std::cout << h.n << std::endl;
+    // std::cout << "--- [DEBUG] 检查完毕 ---" << std::endl;
+    // sleep(5);
+
+    // // ==============================================================
+    // // =============         调试代码结束           =================
+    // // ==============================================================
 
     // --- 3. 调用 cuDSS Solve ---
     CUDSS_CHECK(cudssExecute(h.handle, CUDSS_PHASE_SOLVE, h.config, h.data, h.matA, h.vecX, h.vecB));
