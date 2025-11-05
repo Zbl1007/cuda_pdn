@@ -22,6 +22,16 @@ setup(
             extra_link_args=["-fopenmp"],
         ),
         CUDAExtension(
+            'op_sim_cuda_cpp',
+            ['op_sim_cuda.cu',],
+        # 添加 CUDA 库的路径
+        library_dirs=[os.path.join('/usr/local/cuda', 'lib64')],
+        # 添加需要链接的库
+        libraries=['cudart', 'cusolver', 'cusparse', 'cudss'],
+        # 可以添加一些编译器参数
+        extra_compile_args={'cxx': ['-O3'], 'nvcc': ['-O3']}
+        ),
+        CUDAExtension(
             'ac_sim_cuda_cpp',
             ['ac_sim_cuda.cu',],
         # 添加 CUDA 库的路径

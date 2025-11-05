@@ -9,6 +9,16 @@ from op_sim_cpp import (
     opPardisoHandleExport,
     opPardisoHandleTerminate,
 )
+from op_sim_cuda_cpp import (
+    OpCuDssHandle,
+    opCuDssHandleInit,
+    opCuDssHandleFactorize,
+    opCuDssHandleSolve,
+    opCuDssHandleTerminate,
+    opCuDssHandleGetSolution,
+    opCuDssHandleExport, # 我们将为 GPU 版本添加这个函数
+    # acCuDssSolveBatched,
+)
 from scipy.sparse import dok_matrix, csc_matrix
 from scipy.sparse.linalg import splu, SuperLU
 from Circuit import BranchType
@@ -198,4 +208,40 @@ class OpSimulationPardiso(OpSimulation):
     def export(self):
         return opPardisoHandleExport(
             self.pardiso, self.branch_typ, self.branch_u, self.branch_v, self.branch_val
+        )
+
+
+
+class OpSimulationCuDSS(OpSimulation):
+    def __init__(
+        self,
+        branch_type: torch.Tensor,
+        branch_u: torch.Tensor,
+        branch_v: torch.Tensor,
+        branch_value: torch.Tensor,
+    ):
+        super().__init__(branch_type, branch_u, branch_v, branch_value)
+
+        self.cuDss = OpCuDssHandle()
+        opCuDssHandleInit(
+            self.cuDss, self.branch_typ, self.branch_u, self.branch_v, self.branch_val
+        )
+
+    def factorize(self):
+        opCuDssHandleFactorize(
+            self.cuDss, self.branch_val
+        )
+
+    def solve(self):
+        opCuDssHandleSolve(
+            self.cuDss
+        )
+        self.V = opCuDssHandleGetSolution(self.cuDss)
+
+    def __del__(self):
+        opCuDssHandleTerminate(self.cuDss)
+
+    def export(self):
+        return opCuDssHandleExport(
+            self.cuDss, self.branch_typ, self.branch_u, self.branch_v, self.branch_val
         )
