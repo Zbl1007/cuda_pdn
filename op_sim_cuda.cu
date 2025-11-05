@@ -493,14 +493,14 @@ void opCuDssHandleInit(OpCuDssHandle &h, const at::Tensor &branch_typ,
   const int *us = branch_u.data_ptr<int>();
   const int *vs = branch_v.data_ptr<int>();
   const double *vals = branch_val.data_ptr<double>();
-  std::vector<Triplet> ts; 
-  std::vector<double> rhs;
+  std::vector<Triplet> h_ts; 
+  std::vector<double> h_rhs;
 
-  initTriplets(ts, m, typs, us, vs, vals);
-  initRhs(rhs, m, typs, us, vs, vals);
+  initTriplets(h_ts, m, typs, us, vs, vals);
+  initRhs(h_rhs, m, typs, us, vs, vals);
 
-  h.n = rhs.size();
-  h.nnz = ts.size();
+  h.n = h_rhs.size();
+  h.nnz = h_ts.size();
 
   h.m = m;
   if (h.n == 0) return;
@@ -508,21 +508,19 @@ void opCuDssHandleInit(OpCuDssHandle &h, const at::Tensor &branch_typ,
   // === 1. 在CPU上构建CSR格式 ===
   std::vector<int> h_ia(h.n + 1);
   std::vector<int> h_ja(h.nnz);
-  std::vector<int> h_branch_indices_for_nnz(h.nnz); // 新的映射向量
-  std::vector<double> h_signs_for_nnz(h.nnz); // <--- 新增 CPU 上的符号向量
 
   std::vector<double> h_a(h.nnz);
 
   h_ia[0] = 0;
   int r = 0;
-  for (size_t i = 0; i < ts.size(); i++) {
-    while (ts[i].row > r) {
+  for (size_t i = 0; i < h_ts.size(); i++) {
+    while (h_ts[i].row > r) {
       h_ia[++r] = i;
     }
-    h_ja[i] = ts[i].col;
+    h_ja[i] = h_ts[i].col;
   }
   while (h.n > r) {
-    h_ia[++r] = static_cast<int>(ts.size());
+    h_ia[++r] = static_cast<int>(h_ts.size());
   }
 
   // --- 分配GPU内存并上传结构 ---
@@ -543,8 +541,6 @@ void opCuDssHandleInit(OpCuDssHandle &h, const at::Tensor &branch_typ,
   // --- 拷贝数据到GPU ---
   CUDA_CHECK(cudaMemcpy(h.d_ia, h_ia.data(), (h.n + 1) * sizeof(int), cudaMemcpyHostToDevice));
   CUDA_CHECK(cudaMemcpy(h.d_ja, h_ja.data(), h.nnz * sizeof(int), cudaMemcpyHostToDevice));
-  // CUDA_CHECK(cudaMemcpy(h.d_branch_indices_for_nnz, h_branch_indices_for_nnz.data(), h.nnz * sizeof(int), cudaMemcpyHostToDevice));
-  CUDA_CHECK(cudaMemcpy(h.d_signs_for_nnz, h_signs_for_nnz.data(), h.nnz * sizeof(double), cudaMemcpyHostToDevice)); // <--- 拷贝符号数组
 
 
   CUDA_CHECK(cudaMemcpy(h.d_branch_typs, branch_typ.data_ptr<int>(), h.m * sizeof(int), cudaMemcpyHostToDevice));
@@ -554,9 +550,11 @@ void opCuDssHandleInit(OpCuDssHandle &h, const at::Tensor &branch_typ,
   std::vector<double> h_branch_vals(h.m);
   CUDA_CHECK(cudaMemcpy(h.d_branch_vals, branch_val.data_ptr<double>(), h.m * sizeof(double), cudaMemcpyHostToDevice));
   // --- 创建 cuDSS 矩阵描述符 ---
-  CUDSS_CHECK(cudssMatrixCreateCsr(&h.matA, h.n, h.n, h.nnz, h.d_ia, NULL, h.d_ja, h.d_a, CUDA_R_32I, CUDA_C_64F, CUDSS_MTYPE_SPD, CUDSS_MVIEW_UPPER,CUDSS_BASE_ZERO));
+  CUDSS_CHECK(cudssMatrixCreateCsr(&h.matA, h.n, h.n, h.nnz, h.d_ia, NULL, h.d_ja, h.d_a, CUDA_R_32I, CUDA_C_64F, CUDSS_MTYPE_SYMMETRIC, CUDSS_MVIEW_UPPER,CUDSS_BASE_ZERO));
+
   CUDSS_CHECK(cudssMatrixCreateDn(&h.vecB, h.n, 1, h.n, h.d_b, CUDA_C_64F, CUDSS_LAYOUT_COL_MAJOR));
   CUDSS_CHECK(cudssMatrixCreateDn(&h.vecX, h.n, 1, h.n, h.d_x, CUDA_C_64F, CUDSS_LAYOUT_COL_MAJOR));
+  
   // --- 执行分析阶段 ---
   CUDSS_CHECK(cudssExecute(h.handle, CUDSS_PHASE_ANALYSIS, h.config, h.data, h.matA, h.vecX, h.vecB));
   // 【新增】保存 RHS Kernel 需要的参数
