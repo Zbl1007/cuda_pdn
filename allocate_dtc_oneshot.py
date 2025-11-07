@@ -93,8 +93,8 @@ all_exc_value = val[all_exc_index]
 temperature = 1
 temperature_ratio = 0.9
 temperature_update_iteration = niters // 20
-total_impedance_violation_coeff = 50000
-dtc_count_coeff = 1
+total_impedance_violation_coeff = 500000
+dtc_count_coeff = 0.1
 
 # --------------------------------------
 # Create simulation per frequency point
@@ -240,10 +240,10 @@ count_loss_history = []
 torch.manual_seed(42)
 theta = nn.Parameter(torch.rand((c_index.size(0), 2)))
 optimizer = torch.optim.Adam(nn.ParameterList([theta]), lr=lr)
-# --- 早停法 (Early Stopping) 参数 ---
-patience = 50      # 如果连续50次迭代loss都没有优化，则提前停止
-best_loss = float('inf')  # 初始化一个无穷大的最佳loss值
-patience_counter = 0      # 初始化耐心计数器
+# # --- 早停法 (Early Stopping) 参数 ---
+# patience = 50      # 如果连续50次迭代loss都没有优化，则提前停止
+# best_loss = float('inf')  # 初始化一个无穷大的最佳loss值
+# patience_counter = 0      # 初始化耐心计数器
 
 # (可选) 用于保存效果最好的theta
 best_theta = None
@@ -289,23 +289,23 @@ for i in range(niters):
         total_impedance_violation_coeff * total_impedance_violation
         + dtc_count_coeff * dtc_count
     )
-    # --- 早停法判断逻辑 ---
-    # 我们使用 loss.item() 来获取loss的纯数值进行比较
-    if loss.item() < best_loss:
-        # 如果当前loss比记录的最好loss还要低，说明有进步
-        best_loss = loss.item()
-        patience_counter = 0  # 重置耐心计数器
-        # (可选) 保存当前效果最好的 theta
-        best_theta = theta.clone().detach()
-    else:
-        # 如果loss没有变得更好，增加耐心计数器
-        patience_counter += 1
+    # # --- 早停法判断逻辑 ---
+    # # 我们使用 loss.item() 来获取loss的纯数值进行比较
+    # if loss.item() < best_loss:
+    #     # 如果当前loss比记录的最好loss还要低，说明有进步
+    #     best_loss = loss.item()
+    #     patience_counter = 0  # 重置耐心计数器
+    #     # (可选) 保存当前效果最好的 theta
+    #     best_theta = theta.clone().detach()
+    # else:
+    #     # 如果loss没有变得更好，增加耐心计数器
+    #     patience_counter += 1
 
-    # 如果耐心耗尽，则打印信息并跳出循环
-    if patience_counter >= patience:
-        print(f"\nEarly stopping triggered after {i+1} iterations as loss did not improve for {patience} steps.")
-        break
-    # -----------------------
+    # # 如果耐心耗尽，则打印信息并跳出循环
+    # if patience_counter >= patience:
+    #     print(f"\nEarly stopping triggered after {i+1} iterations as loss did not improve for {patience} steps.")
+    #     break
+    # # -----------------------
     
     loss_history.append(loss.detach().item())
     z_loss_history.append(total_impedance_violation.detach().item())
@@ -322,73 +322,24 @@ for i in range(niters):
 with open("dtc_history.pkl", "wb") as f:
     pickle.dump((loss_history, z_loss_history, count_loss_history), f)
 
-with torch.no_grad():
-    q = torch.softmax(theta, dim=1)[:, 1]
-    order = q.argsort(descending=True)
-
-    # top-k
-    lower = 0
-    upper = order.size(0)
-    
-    # 用于给图片文件命名的计数器
-    plot_step_counter = 0 
-    
-    while lower < upper:
-        n = (lower + upper) // 2
-        select_dtc = order[:n]
-        c_value = torch.zeros_like(base_c_value)
-        c_value[select_dtc] = base_c_value[select_dtc]
-        print(f"n:{n}")
-
-        zs = []
-        for freq, sim in zip(frequency_points, sims):
-            i_voltage, v_current = AcAdjointFunction.apply(
-                g_index,
-                r_index,
-                c_index,
-                l_index,
-                xc_index,
-                xl_index,
-                i_index,
-                v_index,
-                all_exc_index,
-                g_value,
-                r_value,
-                c_value,
-                l_value,
-                xc_value,
-                xl_value,
-                all_exc_value,
-                freq,
-                sim,
-            )
-            zs.append(i_voltage)
-        zs = torch.cat(zs)
-        # ==========================================================
-        # --- 在这里调用我们封装的绘图函数 ---
-        plot_step_counter += 1
-        plot_impedance_curve(frequency_points, zs, n, target_impedance, plot_step_counter)
-        # ==========================================================
-
-        worst_impedance = torch.max(zs.abs())
-        print(f"worst_impedance.item():{worst_impedance.item()}  ,  target_impedance:{target_impedance}")
-        if worst_impedance.item() > target_impedance:
-            lower = n + 1
-        else:
-            upper = n
-
-    select_dtc = order[:upper]
-    for target in select_dtc:
-        result_dtc.append(candidate_dtc[target.item()])
-        
 # with torch.no_grad():
 #     q = torch.softmax(theta, dim=1)[:, 1]
 #     order = q.argsort(descending=True)
-#     for n in range(1, order.size(0) + 1,100):
-#         print(f"n:{n}")
+
+#     # top-k
+#     lower = 0
+#     upper = order.size(0)
+    
+#     # 用于给图片文件命名的计数器
+#     plot_step_counter = 0 
+    
+#     while lower < upper:
+#         n = (lower + upper) // 2
 #         select_dtc = order[:n]
 #         c_value = torch.zeros_like(base_c_value)
 #         c_value[select_dtc] = base_c_value[select_dtc]
+#         print(f"n:{n}")
+
 #         zs = []
 #         for freq, sim in zip(frequency_points, sims):
 #             i_voltage, v_current = AcAdjointFunction.apply(
@@ -413,15 +364,64 @@ with torch.no_grad():
 #             )
 #             zs.append(i_voltage)
 #         zs = torch.cat(zs)
-#         # --- 在这里调用我们封装的绘图函数 ---
-#         plot_impedance_curve(frequency_points, zs, n, target_impedance, n)
 #         # ==========================================================
+#         # --- 在这里调用我们封装的绘图函数 ---
+#         plot_step_counter += 1
+#         plot_impedance_curve(frequency_points, zs, n, target_impedance, plot_step_counter)
+#         # ==========================================================
+
 #         worst_impedance = torch.max(zs.abs())
-#         if worst_impedance.item() < target_impedance:
-#             break
-#     select_dtc = order[:n]
+#         print(f"worst_impedance.item():{worst_impedance.item()}  ,  target_impedance:{target_impedance}")
+#         if worst_impedance.item() > target_impedance:
+#             lower = n + 1
+#         else:
+#             upper = n
+
+#     select_dtc = order[:upper]
 #     for target in select_dtc:
 #         result_dtc.append(candidate_dtc[target.item()])
+        
+with torch.no_grad():
+    q = torch.softmax(theta, dim=1)[:, 1]
+    order = q.argsort(descending=True)
+    for n in range(1, order.size(0) + 1,100):
+        select_dtc = order[:n]
+        c_value = torch.zeros_like(base_c_value)
+        c_value[select_dtc] = base_c_value[select_dtc]
+        zs = []
+        for freq, sim in zip(frequency_points, sims):
+            i_voltage, v_current = AcAdjointFunction.apply(
+                g_index,
+                r_index,
+                c_index,
+                l_index,
+                xc_index,
+                xl_index,
+                i_index,
+                v_index,
+                all_exc_index,
+                g_value,
+                r_value,
+                c_value,
+                l_value,
+                xc_value,
+                xl_value,
+                all_exc_value,
+                freq,
+                sim,
+            )
+            zs.append(i_voltage)
+        zs = torch.cat(zs)
+        # --- 在这里调用我们封装的绘图函数 ---
+        plot_impedance_curve(frequency_points, zs, n, target_impedance, n)
+        print(f"n:{n}  worst_impedance.item():{worst_impedance.item()}  ,  target_impedance:{target_impedance}")
+        # ==========================================================
+        worst_impedance = torch.max(zs.abs())
+        if worst_impedance.item() < target_impedance:
+            break
+    select_dtc = order[:n]
+    for target in select_dtc:
+        result_dtc.append(candidate_dtc[target.item()])
 
 
 end = time.time()

@@ -66,7 +66,7 @@ temperature = 1
 temperature_ratio = 0.9
 temperature_update_iteration = niters // 20
 
-tsv_count_coeff = 1
+tsv_count_coeff = 0.01
 total_drop_violation_coeff = 10
 
 # -------------------------

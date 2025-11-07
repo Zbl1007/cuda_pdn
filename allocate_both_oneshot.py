@@ -11,7 +11,7 @@ import csv
 from OpAdjoint import OpAdjointFunction
 from OpSimulation import OpSimulationScipy, OpSimulationPardiso
 from AcAdjoint import AcAdjointFunction
-from AcSimulation import AcSimulationScipy, AcSimulationPardiso
+from AcSimulation import AcSimulationScipy, AcSimulationPardiso, AcSimulationCuDSS
 from Circuit import Circuit, BranchType
 from build_ckt import build_op_ckt, build_ac_ckt
 
@@ -81,8 +81,8 @@ def initialize_theta_from_file(filepath, w, h):
 
 import sys
 case = sys.argv[1]
-file = "data/{}_104.yaml".format(case)
-file_result = "data/2025_10/{}_104_both_result_50_test_106.yaml".format(case)
+file = "data/{}.yaml".format(case)
+file_result = "data/2025_11/{}_both_result_50.yaml".format(case)
 # file_initial = "data/2025_09/{}_result_dtc_dtconeshot_50.yaml".format(case)  # 初始解
 with open(file, "r") as f:
     design = yaml.load(f.read(), Loader=yaml.FullLoader)
@@ -142,7 +142,7 @@ ac_tsv_cap_branch = [
 # ---------------------------
 # frequency_points
 # ---------------------------
-frequency_points = np.geomspace(0.5e9, 10e9, 100)
+frequency_points = np.geomspace(0.1e9, 10e9, 100)
 
 # ---------------------------
 # op sim paramters
@@ -198,7 +198,7 @@ ac_all_exc_value = ac_val[ac_all_exc_index]
 
 ac_sims = []
 for freq in frequency_points:
-    ac_sims.append(AcSimulationPardiso(ac_typ, ac_u, ac_v, ac_val, freq))
+    ac_sims.append(AcSimulationCuDSS(ac_typ, ac_u, ac_v, ac_val, freq))
     
 
 
@@ -509,8 +509,8 @@ total_impedance_violation_coeff = 15000
 # total_impedance_violation_coeff = 10000
 # 34, 12
 
-tsv_count_coeff = 1.2
-dtc_count_coeff = 1
+tsv_count_coeff = 0.12
+dtc_count_coeff = 0.1
 
 # ---------------------------
 # Train NN
@@ -531,10 +531,10 @@ theta = nn.Parameter(
 # theta = nn.Parameter(initial_theta_values)
 optimizer = torch.optim.Adam(nn.ParameterList([theta]), lr=lr)
 start = time.time()
-# --- 早停法 (Early Stopping) 参数 ---
-patience = 100      # 如果连续80次迭代loss都没有优化，则提前停止
-best_loss = float('inf')  # 初始化一个无穷大的最佳loss值
-patience_counter = 0      # 初始化耐心计数器
+# # --- 早停法 (Early Stopping) 参数 ---
+# patience = 100      # 如果连续80次迭代loss都没有优化，则提前停止
+# best_loss = float('inf')  # 初始化一个无穷大的最佳loss值
+# patience_counter = 0      # 初始化耐心计数器
 
 for i in range(niters):
     # update gumbel softmax temperature 不改变温度值，不需要动态缩小
@@ -623,23 +623,23 @@ for i in range(niters):
         + tsv_count_coeff * tsv_count
         + dtc_count_coeff * dtc_count
     )
-    # --- 早停法判断逻辑 ---
-    # 我们使用 loss.item() 来获取loss的纯数值进行比较
-    if loss.item() < best_loss:
-        # 如果当前loss比记录的最好loss还要低，说明有进步
-        best_loss = loss.item()
-        patience_counter = 0  # 重置耐心计数器
-        # (可选) 保存当前效果最好的 theta
-        best_theta = theta.clone().detach()
-    else:
-        # 如果loss没有变得更好，增加耐心计数器
-        patience_counter += 1
+    # # --- 早停法判断逻辑 ---
+    # # 我们使用 loss.item() 来获取loss的纯数值进行比较
+    # if loss.item() < best_loss:
+    #     # 如果当前loss比记录的最好loss还要低，说明有进步
+    #     best_loss = loss.item()
+    #     patience_counter = 0  # 重置耐心计数器
+    #     # (可选) 保存当前效果最好的 theta
+    #     best_theta = theta.clone().detach()
+    # else:
+    #     # 如果loss没有变得更好，增加耐心计数器
+    #     patience_counter += 1
 
-    # 如果耐心耗尽，则打印信息并跳出循环
-    if patience_counter >= patience:
-        print(f"\nEarly stopping triggered after {i+1} iterations as loss did not improve for {patience} steps.")
-        break
-    # -----------------------
+    # # 如果耐心耗尽，则打印信息并跳出循环
+    # if patience_counter >= patience:
+    #     print(f"\nEarly stopping triggered after {i+1} iterations as loss did not improve for {patience} steps.")
+    #     break
+    # # -----------------------
     loss_history.append(loss.detach().item())
     ir_drop_loss_history.append(total_drop_violation.detach().item())
     z_loss_history.append(total_impedance_violation.detach().item())
@@ -657,7 +657,7 @@ for i in range(niters):
     # )
        # 修改 print 语句来同时显示“软”数量和“硬”数量
     print(
-        "iter {}: loss {:.5G} drop_violation {:.5G} impedance_violation {:.5G} tsv(soft/hard) {:.2f}/{} dtc(soft/hard) {:.2f}/{}".format(
+        "iter {}: loss {:.5G} drop_violation {:.5G} impedance_violation {:.5G} tsv(soft/hard) {:.5G}/{} dtc(soft/hard) {:.5G}/{}".format(
             i,
             loss,
             total_drop_violation,

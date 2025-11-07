@@ -7,35 +7,35 @@ chiplets:
     h: 15
     x: 5
     y: 13
-    power: 2.56
+    power: 256
     freq: 4.8e+9
   - w: 10
     h: 16
     x: 37
     y: 13
-    power: 0.14
+    power: 14
     freq: 1.2e+9
   - w: 12
     h: 8
     x: 5
     y: 4
-    power: 0.2
+    power: 20
     freq: 1.8e+9
   - w: 12
     h: 8
     x: 24
     y: 4
-    power: 0.2
+    power: 20
     freq: 1.8e+9
   - w: 12
     h: 8
     x: 5
     y: 29
-    power: 0.2
+    power: 20
     freq: 1.8e+9
   - w: 12
     h: 8
     x: 24
     y: 29
-    power: 0.2
+    power: 20
     freq: 1.8e+9
