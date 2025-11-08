@@ -51,7 +51,7 @@ if __name__ == '__main__':
     run_name = f"2025_8_25_MyDQN_ValueBased_{case}"
     
     CKT_FILE = f'data/{case}.yaml'
-    RESULT_FILE = f'data/2025_08/{case}_result_tsv_tsvoneshot_50.yaml'
+    RESULT_FILE = f'data/2025_11/{case}_result_tsv_tsvoneshot_50.yaml'
     MODEL_SAVE_PATH = f"models/{run_name}.pth"
     TENSORBOARD_LOG_PATH = f"tensorboard_logs/{run_name}"
     

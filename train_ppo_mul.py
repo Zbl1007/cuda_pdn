@@ -37,18 +37,18 @@ def make_env(rank, seed=0, ckt_file=None, result_file=None):
 if __name__ == '__main__':
     # ==================== 训练参数设置 ====================
     SEED = 12
-    case = "multigpu"
+    case = "ascend910"
     CKT_FILE = f'data/{case}.yaml'
-    RESULT_FILE = f'data/{case}_result_tsv.yaml'
+    RESULT_FILE = f'data/2025_11/{case}_result_tsv.yaml'
     # 【核心修改1】设置要并行运行的环境数量
     # 这个值通常设置为你电脑的CPU核心数，或者稍小一些。
     # 可以从 4, 8, 16 开始尝试。
     N_ENVS = 4
     # 【核心修改1】设置要加载的模型路径和新的保存路径
     # 这个路径必须指向你之前训练并保存的模型文件
-    MODEL_LOAD_PATH = f"models/ppo_circuit_model_parallel_continued_{case}_107.zip" 
+    MODEL_LOAD_PATH = f"models/ppo_circuit_model_parallel_continued_{case}.zip" 
     # 为了不覆盖之前的模型，我们为继续训练后的模型设置一个新的保存路径
-    MODEL_SAVE_PATH_CONTINUED = f"models/ppo_circuit_model_parallel_continued_{case}_107"
+    MODEL_SAVE_PATH_CONTINUED = f"models/ppo_circuit_model_parallel_continued_{case}"
 
     # 【核心修改2】设置新的总训练步数
     # 假设之前训练了 200,000 步，现在我们想再训练 300,000 步，总共达到 500,000 步

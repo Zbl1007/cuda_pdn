@@ -18,7 +18,7 @@ from build_ckt import build_op_ckt
 # ascend910: 13 47.69s | 14 4.74s
 case = "ascend910"
 file = "data/{}.yaml".format(case)
-file_result = "data/2025_11/{}_result_tsv_50.yaml".format(case)
+file_result = "data/2025_11/{}_result_tsv.yaml".format(case)
 with open(file, "r") as f:
     design = yaml.load(f.read(), Loader=yaml.FullLoader)
 result = dict()
@@ -67,7 +67,7 @@ temperature_ratio = 0.9
 temperature_update_iteration = niters // 20
 
 tsv_count_coeff = 0.01
-total_drop_violation_coeff = 10
+total_drop_violation_coeff = 5
 
 # -------------------------
 # Train NN

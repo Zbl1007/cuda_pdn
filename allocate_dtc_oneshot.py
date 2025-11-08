@@ -93,8 +93,9 @@ all_exc_value = val[all_exc_index]
 temperature = 1
 temperature_ratio = 0.9
 temperature_update_iteration = niters // 20
-total_impedance_violation_coeff = 500000
-dtc_count_coeff = 0.1
+total_impedance_violation_coeff = 50000
+dtc_count_coeff = 1 / 25
+
 
 # --------------------------------------
 # Create simulation per frequency point

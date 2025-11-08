@@ -345,7 +345,7 @@ class CircuitEnv(gym.Env):
         self.g_value, self.r_value, self.l_value = [torch.tensor([], dtype=torch.float64)] * 3
         self.initial_c_base_value = val[self.c_index_map]
         self.all_exc_value = val[self.all_exc_index]
-        self.sims = [AcSimulationPardiso(typ, u, v, val, freq) for freq in self.frequency_points]
+        self.sims = [AcSimulationCuDSS(typ, u, v, val, freq) for freq in self.frequency_points]
 
     def _get_impedances(self):
         zs = []
