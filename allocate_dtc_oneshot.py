@@ -13,6 +13,7 @@ from Circuit import Circuit, BranchType
 from math import exp, log, sqrt, pi
 from build_ckt import build_ac_ckt
 import csv
+import os
 
 from plt_impedance import plot_impedance_curve
 
@@ -21,10 +22,49 @@ from plt_impedance import plot_impedance_curve
 # multigpu: 2 5539.12s | 2 1445.90
 # ascend910: 1 1171.41s
 
+# ---------------------------
+# 从文件初始化 theta 的辅助函数
+# ---------------------------
+def initialize_theta_from_file(filepath, candidate_dtc):
+    """
+    从 YAML 文件中读取初始 DTC 位置，
+    在这些位置设置高概率（logits偏向 [0,1]）。
+    其余位置随机初始化。
+    """
+    num_locations = len(candidate_dtc)
+    initial_theta = torch.clamp(torch.randn(num_locations, 2), -1.0, 1.0)
+
+    if not os.path.exists(filepath):
+        print(f"信息: 初始文件 '{filepath}' 未找到，将使用随机初始化。")
+        return initial_theta
+
+    print(f"信息: 从 '{filepath}' 读取初始 DTC 位置。")
+    with open(filepath, "r") as f:
+        initial_solution = yaml.load(f.read(), Loader=yaml.FullLoader)
+
+    # 设定 logits 水平
+    HIGH_LOGIT = 2.0
+    LOW_LOGIT = -2.0
+
+    if "dtcs" in initial_solution and initial_solution["dtcs"]:
+        # 遍历 candidate_dtc 列表，找到匹配的 DTC 坐标
+        for idx, name in enumerate(candidate_dtc):
+            match = re.match(r"dtc_(\d+)_(\d+)", name)
+            if match:
+                x, y = int(match.group(1)), int(match.group(2))
+                if (x, y) in initial_solution["dtcs"]:
+                    # 设置为高概率选中（logits第二列高）
+                    initial_theta[idx, :] = torch.tensor([LOW_LOGIT, HIGH_LOGIT], dtype=torch.float32)
+
+    return initial_theta
+
 case = "ascend910"
 file = "data/{}.yaml".format(case)
-file_result_tsv = "data/2025_11/{}_result_tsv_50.yaml".format(case)
-file_result_dtc = "data/2025_11/{}__result_dtc_50.yaml".format(case)
+file_result_tsv = "data/2025_11/{}_result_tsv.yaml".format(case)
+file_initial = "data/2025_11/{}_result_dtc_ga_OptimalNd433.yaml".format(case)
+with open(file_initial, "r") as f:
+        initial_solution = yaml.load(f.read(), Loader=yaml.FullLoader)
+file_result_dtc = "data/2025_11/{}__result_dtc_50_new.yaml".format(case)
 with open(file, "r") as f:
     design = yaml.load(f.read(), Loader=yaml.FullLoader)
 with open(file_result_tsv, "r") as f:
@@ -71,7 +111,7 @@ frequency_points = np.geomspace(0.1e9, 10e9, 100)
 # NN parameters
 # ---------------------------
 niters = 500
-lr = 0.3
+lr = 0.02
 typ, u, v, val, index = ckt.prepare_sim("0", observe_branch + candidate_branch)
 g_index = torch.tensor([], dtype=torch.long)
 r_index = torch.tensor([], dtype=torch.long)
@@ -93,8 +133,8 @@ all_exc_value = val[all_exc_index]
 temperature = 1
 temperature_ratio = 0.9
 temperature_update_iteration = niters // 20
-total_impedance_violation_coeff = 50000
-dtc_count_coeff = 1 / 25
+total_impedance_violation_coeff = 100000
+dtc_count_coeff = 1
 
 
 # --------------------------------------
@@ -239,15 +279,35 @@ loss_history = []
 z_loss_history = []
 count_loss_history = []
 torch.manual_seed(42)
-theta = nn.Parameter(torch.rand((c_index.size(0), 2)))
+# theta = nn.Parameter(torch.rand((c_index.size(0), 2)))
+
+initial_theta_values = initialize_theta_from_file(file_initial, candidate_dtc)
+theta = nn.Parameter(initial_theta_values)
+
+
 optimizer = torch.optim.Adam(nn.ParameterList([theta]), lr=lr)
 # # --- 早停法 (Early Stopping) 参数 ---
 # patience = 50      # 如果连续50次迭代loss都没有优化，则提前停止
 # best_loss = float('inf')  # 初始化一个无穷大的最佳loss值
 # patience_counter = 0      # 初始化耐心计数器
+# ======== 生成冻结掩码（frozen_mask）========
+frozen_mask = torch.zeros(len(candidate_dtc), dtype=torch.bool)
+if initial_solution and "dtcs" in initial_solution and initial_solution["dtcs"]:
+    for idx, name in enumerate(candidate_dtc):
+        match = re.match(r"dtc_(\d+)_(\d+)", name)
+        if match:
+            x, y = int(match.group(1)), int(match.group(2))
+            if (x, y) in initial_solution["dtcs"]:
+                frozen_mask[idx] = True
+print(f"冻结 DTC 数量: {frozen_mask.sum().item()} / {len(frozen_mask)}")
+freeze_steps = 50  # 冻结前50轮（可调大/小）
 
 # (可选) 用于保存效果最好的theta
 best_theta = None
+with torch.no_grad():
+    probs = torch.softmax(theta, dim=1)[:, 1]
+    print("前10个DTC概率：", probs[:10])
+    print("最大概率:", probs.max().item(), "最小概率:", probs.min().item())
 
 for i in range(niters):
     # update gumbel softmax temperature
@@ -318,6 +378,19 @@ for i in range(niters):
     )
 
     loss.backward()
+    # ==========================================================
+    # ======== 冻结阶段：阻止初始 DTC logits 被修改 ========
+    # ==========================================================
+    if i < freeze_steps:
+        with torch.no_grad():
+            # 手动将梯度置0，以防这些参数被Adam更新
+            theta.grad[frozen_mask, :] = 0.0
+            # 同时保证这些 logits 保持高低状态 [-2, 2]
+            theta[frozen_mask, 0] = -2.0
+            theta[frozen_mask, 1] = 2.0
+        if i == 0:
+            print(f"前 {freeze_steps} 轮冻结 {frozen_mask.sum().item()} 个 DTC 的 logits。")
+
     optimizer.step()
 
 with open("dtc_history.pkl", "wb") as f:
