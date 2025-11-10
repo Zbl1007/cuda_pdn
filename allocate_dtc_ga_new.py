@@ -256,7 +256,7 @@ def plot_zin_curves(individual_to_plot,
     plt.legend()
 
     # Dynamic Y-axis limits
-    upper_y_limit = 1.0 # Default
+    upper_y_limit = 0.01 # Default
     all_valid_data = np.concatenate([
         zin_optimized[~np.isnan(zin_optimized) & ~np.isinf(zin_optimized)],
         zin_baseline[~np.isnan(zin_baseline) & ~np.isinf(zin_baseline)],
@@ -265,10 +265,10 @@ def plot_zin_curves(individual_to_plot,
     if all_valid_data.size > 0:
         upper_y_limit = max(upper_y_limit, np.max(all_valid_data) * 1.5) # Add some headroom
     
-    min_y_limit = 1e-4 # Default bottom
+    min_y_limit = 1e-8 # Default bottom
     if all_valid_data.size > 0:
-        min_y_limit = min(1e-3, np.min(all_valid_data) * 0.5 )
-        min_y_limit = max(1e-4, min_y_limit) # ensure it's not too low
+        min_y_limit = min(1e-7, np.min(all_valid_data) * 0.5 )
+        min_y_limit = max(1e-8, min_y_limit) # ensure it's not too low
 
     plt.ylim(bottom=min_y_limit, top=upper_y_limit)
     plt.tight_layout()
@@ -418,7 +418,7 @@ def run_ga_for_nd(num_decaps_to_select_param,
     return best_individual_inner, best_n_no_ok_inner
 def find_optimal_nd_iteratively():
     # --- 主要配置 (可以移到这里，或者作为参数传入) ---
-    CASE_NAME = "ascend910"  # 可选: "case1", "micro150", "ascend910" "multigpu"
+    CASE_NAME = "micro150"  # 可选: "case1", "micro150", "ascend910" "multigpu"
     NUM_FREQUENCY_POINTS = 100
     # 定义 GA 参数字典
     ga_run_params = {
@@ -531,8 +531,12 @@ def find_optimal_nd_iteratively():
     # ------------------   暴力搜start    ------------------
     all_nd_results = [] # Store results for all Nd to pick best if no N_no_ok=0 is found
     # 外部循环，从 Nd=0 开始尝试
-    for current_nd_test in range(0, max_nd_to_test + 1):
-        print(f"\n===== Running GA with NUM_DECAPS_TO_SELECT = {current_nd_test} =====")
+    ii = 1
+    # for current_nd_test in range(406, max_nd_to_test, ii):
+    current_nd_test = 409
+    while current_nd_test <= max_nd_to_test:
+        ii = random.randint(1, 10)
+        print(f"\n===== Running GA with NUM_DECAPS_TO_SELECT = {current_nd_test} ii = {ii} =====")
         
         best_individual_found, n_no_ok_found = run_ga_for_nd(
             num_decaps_to_select_param=current_nd_test,
@@ -557,6 +561,7 @@ def find_optimal_nd_iteratively():
             }
             break # 找到了就停止外部循环
         
+        current_nd_test += ii
 
     # ------------------   暴力搜end    ------------------
 
