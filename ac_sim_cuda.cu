@@ -818,7 +818,7 @@ void acCuDssHandleInit(AcCuDssHandle &h, const at::Tensor &branch_typ,
 }
 
 void acCuDssHandleFactorize(AcCuDssHandle &h, 
-                              //   const at::Tensor &branch_typ,
+                              //  const at::Tensor &branch_typ,
                               //  const at::Tensor &branch_u,
                               //  const at::Tensor &branch_v,
                                const at::Tensor &branch_val, double freq) {
@@ -860,18 +860,20 @@ void acCuDssHandleFactorize(AcCuDssHandle &h,
 
 
     thrust::device_vector<cuDoubleComplex> d_vals(reinterpret_cast<const cuDoubleComplex*>(vals), reinterpret_cast<const cuDoubleComplex*>(vals) + m);
-    const int* d_typs_ptr = h.d_branch_typs;
-    const int* d_us_ptr = h.d_branch_us;
-    const int* d_vs_ptr = h.d_branch_vs;
+    // const int* d_typs_ptr = h.d_branch_typs;
+    // const int* d_us_ptr = h.d_branch_us;
+    // const int* d_vs_ptr = h.d_branch_vs;
     // std::vector<int> out_rows, out_cols;
     // std::vector<cuDoubleComplex> out_vals;
     // std::cout << "Coalesced triplet count: " <<  std::endl;
     int nnz_computed = 0; 
+    // CUDA_CHECK(cudaMemcpy(h.d_branch_vals, branch_val.data_ptr<c10::complex<double>>(), h.m * sizeof(cuDoubleComplex), cudaMemcpyHostToDevice));
+
     initTripletsGPU_thrust(
         m,
-        d_typs_ptr,
-        d_us_ptr,
-        d_vs_ptr,
+        h.d_branch_typs,
+        h.d_branch_us,
+        h.d_branch_vs,
         thrust::raw_pointer_cast(d_vals.data()),
         freq, // freq
         h.num_nonzero_nodes, // <-- 从 h 中传入
@@ -936,13 +938,18 @@ void acCuDssHandleFactorize(AcCuDssHandle &h,
     // CUDSS_CHECK(cudssExecute(h.handle, CUDSS_PHASE_FACTORIZATION, h.config, h.data, h.matA, h.vecX, h.vecB));
 }
 
-void acCuDssHandleSolve(AcCuDssHandle &h) {
+void acCuDssHandleSolve(AcCuDssHandle &h,
+                        // const at::Tensor &branch_typ,
+                        // const at::Tensor &branch_u,
+                        // const at::Tensor &branch_v,
+                        const at::Tensor &branch_val
+    ) {
     if (h.n == 0) return;
-    // size_t m = branch_typ.size(0);
+    size_t m = branch_val.size(0);
     // const int *typs = branch_typ.data_ptr<int>();
     // const int *us = branch_u.data_ptr<int>();
     // const int *vs = branch_v.data_ptr<int>();
-    // const std::complex<double> *vals = reinterpret_cast<const std::complex<double> *>(branch_val.data_ptr<c10::complex<double>>());
+    const std::complex<double> *vals = reinterpret_cast<const std::complex<double> *>(branch_val.data_ptr<c10::complex<double>>());
 
     // initRhs(h.rhs, m, typs, us, vs, vals);
     // std::vector<cuDoubleComplex> h_rhs(h.n);
@@ -970,13 +977,21 @@ void acCuDssHandleSolve(AcCuDssHandle &h) {
     int blocks_per_grid = (h.m + threads_per_block - 1) / threads_per_block;
     // --- 2. 启动 Kernel 直接在 GPU 上更新 RHS 向量 ---
     CUDA_CHECK(cudaMemset(h.d_b, 0, h.n * sizeof(cuDoubleComplex)));
+
+    thrust::device_vector<cuDoubleComplex> d_vals(reinterpret_cast<const cuDoubleComplex*>(vals), reinterpret_cast<const cuDoubleComplex*>(vals) + m);
+
     update_rhs_kernel<<<blocks_per_grid, threads_per_block>>>(
         h.d_b,
         h.n,
         h.d_branch_typs,
         h.d_branch_us,
         h.d_branch_vs,
-        h.d_branch_vals,
+        // h.d_branch_vals,
+        // typs,
+        // us,
+        // vs,
+        // vals,
+        thrust::raw_pointer_cast(d_vals.data()),
         h.m,
         h.num_nonzero_nodes,
         h.num_v_sources
@@ -1036,7 +1051,7 @@ at::Tensor acCuDssHandleGetSolution(AcCuDssHandle &h) {
       at::empty({h.n}, at::TensorOptions().dtype(at::kComplexDouble));
   std::complex<double> *sln_ptr = reinterpret_cast<std::complex<double> *>(
       sln.data_ptr<c10::complex<double>>());
-
+  
   memcpy(sln_ptr, h.h_x.data(), h.n * sizeof(std::complex<double>));
 
   return sln;

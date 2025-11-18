@@ -335,7 +335,7 @@ class AcSimulationCuDSS(AcSimulation):
             # self.branch_typ,
             # self.branch_u,
             # self.branch_v,
-            # self.branch_val,
+            self.branch_val,
         )
         self.V = acCuDssHandleGetSolution(self.cuDss)
 

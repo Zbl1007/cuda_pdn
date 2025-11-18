@@ -16,9 +16,9 @@ from build_ckt import build_op_ckt
 # multigpu: 28 239.03s | 33 6.09s
 # micro150: 23 39.36s | 24 4.13s
 # ascend910: 13 47.69s | 14 4.74s
-case = "ascend910"
+case = "multigpu"
 file = "data/{}.yaml".format(case)
-file_result = "data/2025_11/{}_result_tsv.yaml".format(case)
+file_result = "data/2025_11/{}_result_tsv_10.yaml".format(case)
 with open(file, "r") as f:
     design = yaml.load(f.read(), Loader=yaml.FullLoader)
 result = dict()
@@ -66,11 +66,11 @@ temperature = 1
 temperature_ratio = 0.9
 temperature_update_iteration = niters // 20
 
-tsv_count_coeff = 0.01
-total_drop_violation_coeff = 5
+tsv_count_coeff = 0.1
+total_drop_violation_coeff = 1000
 
 # -------------------------
-# Train NN
+# Train NN 3872 3733
 # -------------------------
 loss_history = []
 count_loss_history = []

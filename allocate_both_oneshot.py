@@ -16,7 +16,7 @@ from Circuit import Circuit, BranchType
 from build_ckt import build_op_ckt, build_ac_ckt
 
 from plt_impedance import plot_impedance_curve
-
+    
 # ---------------------------
 # 从文件初始化 theta 的辅助函数
 # ---------------------------
@@ -82,7 +82,7 @@ def initialize_theta_from_file(filepath, w, h):
 import sys
 case = sys.argv[1]
 file = "data/{}.yaml".format(case)
-file_result = "data/2025_11/{}_both_result_50.yaml".format(case)
+file_result = "data/2025_11/{}_both_result.yaml".format(case)
 # file_initial = "data/2025_09/{}_result_dtc_dtconeshot_50.yaml".format(case)  # 初始解
 with open(file, "r") as f:
     design = yaml.load(f.read(), Loader=yaml.FullLoader)
@@ -202,134 +202,134 @@ for freq in frequency_points:
     
 
 
-zs = []
-for freq, sim in zip(frequency_points, ac_sims):
-    i_voltage, v_current = AcAdjointFunction.apply(
-        ac_g_index,
-        ac_r_index,
-        torch.cat([ac_tsv_c_index, ac_dtc_c_index]),
-        ac_l_index,
-        ac_xc_index,
-        ac_xl_index,
-        ac_i_index,
-        ac_v_index,
-        ac_all_exc_index,
-        ac_base_g_value,
-        ac_r_value,
-        torch.cat([ac_base_tsv_c_value, ac_base_tsv_c_value]),# 放满
-        ac_l_value,
-        ac_xc_value,
-        ac_base_xl_value,
-        ac_all_exc_value,
-        freq,
-        sim,
-    )
-    zs.append(i_voltage)
-zs = torch.cat(zs)
-impedances = zs.abs()
-worst_impedance ,worst_impedance_index = torch.max(zs.abs(),  dim=0)
-impedance_violation = torch.nn.functional.relu(impedances - target_impedance)
-total_impedance_violation = impedance_violation.sum() / frequency_points.shape[0]
+# zs = []
+# for freq, sim in zip(frequency_points, ac_sims):
+#     i_voltage, v_current = AcAdjointFunction.apply(
+#         ac_g_index,
+#         ac_r_index,
+#         torch.cat([ac_tsv_c_index, ac_dtc_c_index]),
+#         ac_l_index,
+#         ac_xc_index,
+#         ac_xl_index,
+#         ac_i_index,
+#         ac_v_index,
+#         ac_all_exc_index,
+#         ac_base_g_value,
+#         ac_r_value,
+#         torch.cat([ac_base_tsv_c_value, ac_base_tsv_c_value]),# 放满
+#         ac_l_value,
+#         ac_xc_value,
+#         ac_base_xl_value,
+#         ac_all_exc_value,
+#         freq,
+#         sim,
+#     )
+#     zs.append(i_voltage)
+# zs = torch.cat(zs)
+# impedances = zs.abs()
+# worst_impedance ,worst_impedance_index = torch.max(zs.abs(),  dim=0)
+# impedance_violation = torch.nn.functional.relu(impedances - target_impedance)
+# total_impedance_violation = impedance_violation.sum() / frequency_points.shape[0]
 
 
-# 创建数据保存路径
-output_file = '104impedance_data.csv'
+# # 创建数据保存路径
+# output_file = '104impedance_data.csv'
 
-# 打开CSV文件，准备写入
-with open(output_file, 'w', newline='') as csvfile:
-    writer = csv.writer(csvfile)
+# # 打开CSV文件，准备写入
+# with open(output_file, 'w', newline='') as csvfile:
+#     writer = csv.writer(csvfile)
     
-    # 写入文件的标题行
-    writer.writerow(['Frequency (Hz)', 'Impedance (Ohms)', 'Impedance Violation (Ohms)'])
+#     # 写入文件的标题行
+#     writer.writerow(['Frequency (Hz)', 'Impedance (Ohms)', 'Impedance Violation (Ohms)'])
     
-    # 写入频率点、阻抗值和违例阻抗
-    for freq, impedance, violation in zip(frequency_points, impedances, impedance_violation):
-        writer.writerow([freq.item(), impedance.item(), violation.item()])
+#     # 写入频率点、阻抗值和违例阻抗
+#     for freq, impedance, violation in zip(frequency_points, impedances, impedance_violation):
+#         writer.writerow([freq.item(), impedance.item(), violation.item()])
 
-print(f"Impedance data saved to {output_file}")
-
-
-print(f"worst_impedance:{worst_impedance}")
-print(f"worst_impedance_index:{worst_impedance_index}")
-
-print(f"impedance_violation:{impedance_violation}")
-print(f"impedance_violation.sum:{impedance_violation.sum()}")
-
-print(f"total_impedance_violation:{total_impedance_violation}")
+# print(f"Impedance data saved to {output_file}")
 
 
+# print(f"worst_impedance:{worst_impedance}")
+# print(f"worst_impedance_index:{worst_impedance_index}")
 
-zs_no = []
-tsv_c_value_no = torch.zeros_like(ac_base_tsv_c_value)
-ac_dtc_c_value_no = torch.zeros_like(ac_base_tsv_c_value)
-ac_g_value = torch.zeros_like(ac_base_g_value)
-ac_xl_value = torch.zeros_like(ac_base_xl_value)
-for freq, sim in zip(frequency_points, ac_sims):
-    i_voltage, v_current = AcAdjointFunction.apply(
-        ac_g_index,
-        ac_r_index,
-        torch.cat([ac_tsv_c_index, ac_dtc_c_index]),
-        ac_l_index,
-        ac_xc_index,
-        ac_xl_index,
-        ac_i_index,
-        ac_v_index,
-        ac_all_exc_index,
-        ac_g_value,
-        ac_r_value,
-        torch.cat([tsv_c_value_no, ac_dtc_c_value_no]),# 不放
-        ac_l_value,
-        ac_xc_value,
-        ac_xl_value,
-        ac_all_exc_value,
-        freq,
-        sim,
-    )
-    zs_no.append(i_voltage)
-zs_no = torch.cat(zs_no)
-impedances_no = zs_no.abs()
-worst_impedance_no ,worst_impedance_index_no = torch.max(zs_no.abs(),  dim=0)
-impedance_violation_no = torch.nn.functional.relu(impedances_no - target_impedance)
-total_impedance_violation_no = impedance_violation_no.sum() / frequency_points.shape[0]
+# print(f"impedance_violation:{impedance_violation}")
+# print(f"impedance_violation.sum:{impedance_violation.sum()}")
+
+# print(f"total_impedance_violation:{total_impedance_violation}")
 
 
 
+# zs_no = []
+# tsv_c_value_no = torch.zeros_like(ac_base_tsv_c_value)
+# ac_dtc_c_value_no = torch.zeros_like(ac_base_tsv_c_value)
+# ac_g_value = torch.zeros_like(ac_base_g_value)
+# ac_xl_value = torch.zeros_like(ac_base_xl_value)
+# for freq, sim in zip(frequency_points, ac_sims):
+#     i_voltage, v_current = AcAdjointFunction.apply(
+#         ac_g_index,
+#         ac_r_index,
+#         torch.cat([ac_tsv_c_index, ac_dtc_c_index]),
+#         ac_l_index,
+#         ac_xc_index,
+#         ac_xl_index,
+#         ac_i_index,
+#         ac_v_index,
+#         ac_all_exc_index,
+#         ac_g_value,
+#         ac_r_value,
+#         torch.cat([tsv_c_value_no, ac_dtc_c_value_no]),# 不放
+#         ac_l_value,
+#         ac_xc_value,
+#         ac_xl_value,
+#         ac_all_exc_value,
+#         freq,
+#         sim,
+#     )
+#     zs_no.append(i_voltage)
+# zs_no = torch.cat(zs_no)
+# impedances_no = zs_no.abs()
+# worst_impedance_no ,worst_impedance_index_no = torch.max(zs_no.abs(),  dim=0)
+# impedance_violation_no = torch.nn.functional.relu(impedances_no - target_impedance)
+# total_impedance_violation_no = impedance_violation_no.sum() / frequency_points.shape[0]
 
-print(f"worst_impedance:{worst_impedance_no}")
-print(f"worst_impedance_index:{worst_impedance_index_no}")
-
-print(f"impedance_violation:{impedance_violation_no}")
-print(f"impedance_violation.sum:{impedance_violation_no.sum()}")
-
-print(f"total_impedance_violation:{total_impedance_violation_no}")
 
 
 
-plt.plot(frequency_points, impedances.detach().numpy(), label='Simulated Impedance')
+# print(f"worst_impedance:{worst_impedance_no}")
+# print(f"worst_impedance_index:{worst_impedance_index_no}")
 
-plt.plot(frequency_points, impedances_no.detach().numpy(), label='Simulated No DTC Impedance')
+# print(f"impedance_violation:{impedance_violation_no}")
+# print(f"impedance_violation.sum:{impedance_violation_no.sum()}")
 
-# --- 绘图设置 ---
-plt.ylabel("Impedance[Ohm]")
-plt.yscale("log")
-plt.xlabel("Frequency[Hz]")
-plt.xscale("log")
-plt.grid(True, which="both", ls="--")
+# print(f"total_impedance_violation:{total_impedance_violation_no}")
 
-# ==========================================================
-# --- 新增的代码在这里 ---
-# 定义您要标记的值
-target_value = target_impedance
 
-# 在图上 y=target_value 的位置画一条红色的虚线
-plt.axhline(y=target_value, color='r', linestyle='--', label=f'Reference Line')
-# ==========================================================
 
-# --- 新增：显示图例 (因为我们为两条线都添加了label) ---
-plt.legend()
+# plt.plot(frequency_points, impedances.detach().numpy(), label='Simulated Impedance')
 
-plt.tight_layout()
-plt.savefig(f"{case}2025_10_05_bothonshot.png")
+# plt.plot(frequency_points, impedances_no.detach().numpy(), label='Simulated No DTC Impedance')
+
+# # --- 绘图设置 ---
+# plt.ylabel("Impedance[Ohm]")
+# plt.yscale("log")
+# plt.xlabel("Frequency[Hz]")
+# plt.xscale("log")
+# plt.grid(True, which="both", ls="--")
+
+# # ==========================================================
+# # --- 新增的代码在这里 ---
+# # 定义您要标记的值
+# target_value = target_impedance
+
+# # 在图上 y=target_value 的位置画一条红色的虚线
+# plt.axhline(y=target_value, color='r', linestyle='--', label=f'Reference Line')
+# # ==========================================================
+
+# # --- 新增：显示图例 (因为我们为两条线都添加了label) ---
+# plt.legend()
+
+# plt.tight_layout()
+# plt.savefig(f"{case}2025_10_05_bothonshot.png")
 
 
 
@@ -467,9 +467,9 @@ temperature_ratio = 0.9
 # total_impedance_violation_coeff = 50000
 # 32, 9
 
-temperature_update_iteration = niters // 25
-total_drop_violation_coeff = 25
-total_impedance_violation_coeff = 15000
+temperature_update_iteration = niters // 20
+total_drop_violation_coeff = 1000
+total_impedance_violation_coeff = 5000000
 # 27, 4
 # 32, 4
 # 17, 1

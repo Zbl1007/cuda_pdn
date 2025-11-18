@@ -2,7 +2,7 @@ import os
 import matplotlib.pyplot as plt
 
 
-def plot_impedance_curve(freq_points, impedance_tensor, num_dtcs, target_imp, iteration_step, save_dir="data/plt3"):
+def plot_impedance_curve(freq_points, impedance_tensor, num_dtcs, target_imp, iteration_step, save_dir="data/plt4"):
     """
     绘制并保存单次仿真得到的阻抗曲线图。
 
