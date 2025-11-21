@@ -1163,6 +1163,135 @@ acCuDssHandleExport(AcCuDssHandle &h, const at::Tensor &branch_typ,
 
 
 // =========================================================================
+// ==              批量计算函数 (Batch Solve)                             ==
+// =========================================================================
+at::Tensor acCuDssHandleSolveBatch(AcCuDssHandle &h,
+                                   const at::Tensor &branch_val,
+                                   const at::Tensor &frequencies) {
+  if (h.n == 0)
+    return at::empty({0});
+
+  // 1. 准备频率列表 (移到 CPU 以便循环)
+  at::Tensor freqs_cpu = frequencies.to(at::kCPU);
+  auto freqs_acc = freqs_cpu.accessor<double, 1>();
+  int num_freqs = freqs_cpu.size(0);
+
+  // 2. 准备输出 Tensor (在 GPU 上分配 [num_freqs, n])
+  at::Tensor output = at::empty({num_freqs, h.n},
+                                branch_val.options().dtype(at::kComplexDouble));
+
+  // 3. 准备 branch_val 的 GPU 副本
+  size_t m = branch_val.size(0);
+  const cuDoubleComplex *vals_ptr = reinterpret_cast<const cuDoubleComplex *>(
+      branch_val.data_ptr<c10::complex<double>>());
+
+  thrust::device_vector<cuDoubleComplex> d_vals(vals_ptr, vals_ptr + m);
+  const cuDoubleComplex *d_vals_raw = thrust::raw_pointer_cast(d_vals.data());
+
+  // 4. 循环处理每个频率
+  for (int i = 0; i < num_freqs; ++i) {
+    double freq = freqs_acc[i];
+
+    // A. 更新矩阵数值 (Factorize 逻辑)
+    int nnz_computed =
+        initTripletsGPU_thrust(m, h.d_branch_typs, h.d_branch_us, h.d_branch_vs,
+                               d_vals_raw, freq, h.num_nonzero_nodes, h.d_a);
+
+    // B. 更新 RHS (b 向量)
+    // 先清零
+    CUDA_CHECK(cudaMemset(h.d_b, 0, h.n * sizeof(cuDoubleComplex)));
+    // 启动 kernel 更新
+    int threads = 256;
+    int blocks = (m + threads - 1) / threads;
+    update_rhs_kernel<<<blocks, threads>>>(
+        h.d_b, h.n, h.d_branch_typs, h.d_branch_us, h.d_branch_vs, d_vals_raw,
+        m, h.num_nonzero_nodes, h.num_v_sources);
+    CUDA_CHECK(cudaGetLastError());
+
+    // C. cuDSS Factorization
+    CUDSS_CHECK(cudssExecute(h.handle, CUDSS_PHASE_FACTORIZATION, h.config,
+                             h.data, h.matA, h.vecX, h.vecB));
+
+    // D. cuDSS Solve
+    CUDSS_CHECK(cudssExecute(h.handle, CUDSS_PHASE_SOLVE, h.config, h.data,
+                             h.matA, h.vecX, h.vecB));
+
+    // E. 拷贝结果
+    cuDoubleComplex *dest_ptr = reinterpret_cast<cuDoubleComplex *>(
+                                    output.data_ptr<c10::complex<double>>()) +
+                                i * h.n;
+    CUDA_CHECK(cudaMemcpyAsync(dest_ptr, h.d_x, h.n * sizeof(cuDoubleComplex),
+                               cudaMemcpyDeviceToDevice));
+  }
+
+  return output;
+}
+
+// =========================================================================
+// ==              批量计算函数 (带自定义 RHS)                            ==
+// =========================================================================
+at::Tensor acCuDssHandleSolveBatchWithRhs(AcCuDssHandle &h,
+                                          const at::Tensor &branch_val,
+                                          const at::Tensor &frequencies,
+                                          const at::Tensor &rhs_batch) {
+  if (h.n == 0)
+    return at::empty({0});
+
+  at::Tensor freqs_cpu = frequencies.to(at::kCPU);
+  auto freqs_acc = freqs_cpu.accessor<double, 1>();
+  int num_freqs = freqs_cpu.size(0);
+
+  // 检查 rhs_batch 维度 [num_freqs, n]
+  if (rhs_batch.size(0) != num_freqs || rhs_batch.size(1) != h.n) {
+    throw std::runtime_error("rhs_batch dimension mismatch");
+  }
+
+  at::Tensor output = at::empty({num_freqs, h.n},
+                                branch_val.options().dtype(at::kComplexDouble));
+
+  size_t m = branch_val.size(0);
+  const cuDoubleComplex *vals_ptr = reinterpret_cast<const cuDoubleComplex *>(
+      branch_val.data_ptr<c10::complex<double>>());
+
+  thrust::device_vector<cuDoubleComplex> d_vals(vals_ptr, vals_ptr + m);
+  const cuDoubleComplex *d_vals_raw = thrust::raw_pointer_cast(d_vals.data());
+
+  for (int i = 0; i < num_freqs; ++i) {
+    double freq = freqs_acc[i];
+
+    // A. 更新矩阵
+    initTripletsGPU_thrust(m, h.d_branch_typs, h.d_branch_us, h.d_branch_vs,
+                           d_vals_raw, freq, h.num_nonzero_nodes, h.d_a);
+
+    // B. 设置自定义 RHS
+    // 从 rhs_batch[i] 拷贝到 h.d_b
+    const cuDoubleComplex *src_rhs =
+        reinterpret_cast<const cuDoubleComplex *>(
+            rhs_batch.data_ptr<c10::complex<double>>()) +
+        i * h.n;
+    CUDA_CHECK(cudaMemcpyAsync(h.d_b, src_rhs, h.n * sizeof(cuDoubleComplex),
+                               cudaMemcpyDeviceToDevice));
+
+    // C. Factorize
+    CUDSS_CHECK(cudssExecute(h.handle, CUDSS_PHASE_FACTORIZATION, h.config,
+                             h.data, h.matA, h.vecX, h.vecB));
+
+    // D. Solve
+    CUDSS_CHECK(cudssExecute(h.handle, CUDSS_PHASE_SOLVE, h.config, h.data,
+                             h.matA, h.vecX, h.vecB));
+
+    // E. 拷贝结果
+    cuDoubleComplex *dest_ptr = reinterpret_cast<cuDoubleComplex *>(
+                                    output.data_ptr<c10::complex<double>>()) +
+                                i * h.n;
+    CUDA_CHECK(cudaMemcpyAsync(dest_ptr, h.d_x, h.n * sizeof(cuDoubleComplex),
+                               cudaMemcpyDeviceToDevice));
+  }
+
+  return output;
+}
+
+// =========================================================================
 // ==              PYBIND11 模块定义                                      ==
 // =========================================================================
 namespace py = pybind11;
@@ -1174,6 +1303,10 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("acCuDssHandleFactorize", &acCuDssHandleFactorize,
         "acCuDssHandleFactorize");
     m.def("acCuDssHandleSolve", &acCuDssHandleSolve, "acCuDssHandleSolve");
+    m.def("acCuDssHandleSolveBatch", &acCuDssHandleSolveBatch,
+        "acCuDssHandleSolveBatch");
+    m.def("acCuDssHandleSolveBatchWithRhs", &acCuDssHandleSolveBatchWithRhs,
+        "acCuDssHandleSolveBatchWithRhs");
     m.def("acCuDssHandleGetSolution", &acCuDssHandleGetSolution,
         "acCuDssHandleGetSolution");
     m.def("acCuDssHandleTerminate", &acCuDssHandleTerminate,

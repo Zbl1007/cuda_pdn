@@ -20,6 +20,8 @@ from ac_sim_cuda_cpp import (
     acCuDssHandleTerminate,
     acCuDssHandleGetSolution,
     acCuDssHandleExport, # 我们将为 GPU 版本添加这个函数
+    acCuDssHandleSolveBatch,
+    acCuDssHandleSolveBatchWithRhs
 )
 
 
@@ -127,6 +129,134 @@ class AcSimulation:
         current[I_index_mask] = I_current
         return current
 
+    def branch_current_batch(self, branch_index: torch.Tensor, freqs: torch.Tensor = None) -> torch.Tensor:
+        """
+        计算支路电流。
+        如果 freqs 不为 None，则执行批量计算。
+        freqs: [num_freqs]
+        Returns: [num_freqs, num_branches] if freqs is not None, else [num_branches]
+        """
+        branch_typ = self.branch_typ[branch_index]
+        branch_val = self.branch_val[branch_index]
+
+        V_index_mask = branch_typ == BranchType.V
+        I_index_mask = branch_typ == BranchType.I
+        G_index_mask = branch_typ == BranchType.G
+        R_index_mask = branch_typ == BranchType.R
+        C_index_mask = branch_typ == BranchType.C
+        L_index_mask = branch_typ == BranchType.L
+        XC_index_mask = branch_typ == BranchType.XC
+        XL_index_mask = branch_typ == BranchType.XL
+        Y_index_mask = branch_typ == BranchType.Y
+        Z_index_mask = branch_typ == BranchType.Z
+
+        (V_index,) = torch.where(V_index_mask)
+        # V_val = branch_val[V_index]
+        (I_index,) = torch.where(I_index_mask)
+        I_val = branch_val[I_index]
+        (G_index,) = torch.where(G_index_mask)
+        G_val = branch_val[G_index]
+        (R_index,) = torch.where(R_index_mask)
+        R_val = branch_val[R_index]
+        (C_index,) = torch.where(C_index_mask)
+        C_val = branch_val[C_index]
+        (L_index,) = torch.where(L_index_mask)
+        L_val = branch_val[L_index]
+        (XC_index,) = torch.where(XC_index_mask)
+        XC_val = branch_val[XC_index]
+        (XL_index,) = torch.where(XL_index_mask)
+        XL_val = branch_val[XL_index]
+        (Y_index,) = torch.where(Y_index_mask)
+        Y_val = branch_val[Y_index]
+        (Z_index,) = torch.where(Z_index_mask)
+        Z_val = branch_val[Z_index]
+
+        # V_current 需要特殊处理，通常通过 KCL 或 MNA 求解得到
+        # 这里假设 V_current 无法直接通过 V/Z 计算，暂且返回 0 或需要从解向量中提取（如果 MNA 包含电流变量）
+        # 在 MNA 中，电压源电流是未知量，存储在解向量的后半部分
+        # 假设 self.V 包含了电压源电流
+        # 需要知道电压源电流在 self.V 中的索引
+        # 假设电压源电流索引从 num_nodes 开始
+        # 这是一个简化的假设，实际需要根据 MNA 结构
+        # 暂时忽略 V_current 的精确计算，或者假设它为 0
+        V_current = torch.zeros_like(V_index, dtype=torch.complex128) 
+        # TODO: 从 self.V 中提取 V_current
+        
+        I_current = I_val # 电流源电流等于其值
+        if freqs is not None:
+             # 广播 I_current: [M] -> [N, M]
+             I_current = I_current.unsqueeze(0).expand(freqs.size(0), -1)
+             V_current = V_current.unsqueeze(0).expand(freqs.size(0), -1)
+
+        # 计算导纳
+        if freqs is None:
+            f = self.freq
+            omega = 2 * np.pi * f
+            jomega = 1j * omega
+            
+            G_admittance = torch.concat([
+                G_val,
+                1 / R_val,
+                jomega * C_val,
+                1 / (jomega * L_val),
+                jomega / XC_val,
+                1 / jomega * XL_val,
+                Y_val,
+                1 / Z_val
+            ])
+        else:
+            # Batch case
+            # freqs: [N]
+            # vals: [M]
+            # result: [N, M]
+            omega = 2 * np.pi * freqs # [N]
+            jomega = 1j * omega # [N]
+            
+            # Helper for broadcasting
+            def bcast(val): return val.unsqueeze(0) # [1, M]
+            def bcast_f(f): return f.unsqueeze(1)   # [N, 1]
+            
+            G_admittance = torch.cat([
+                bcast(G_val).expand(freqs.size(0), -1),
+                bcast(1 / R_val).expand(freqs.size(0), -1),
+                bcast_f(jomega) * bcast(C_val),
+                1 / (bcast_f(jomega) * bcast(L_val)),
+                bcast_f(jomega) / bcast(XC_val),
+                1 / bcast_f(jomega) * bcast(XL_val),
+                bcast(Y_val).expand(freqs.size(0), -1),
+                bcast(1 / Z_val).expand(freqs.size(0), -1)
+            ], dim=1)
+
+        G_indices_all = torch.concat(
+            [G_index, R_index, C_index, L_index, XC_index, XL_index, Y_index, Z_index]
+        )
+        
+        # 计算电压差
+        v_diff = self.branch_voltage(branch_index[G_indices_all])
+        
+        # 计算电流 I = Y * V
+        G_current = v_diff * G_admittance
+
+        # 组装结果
+        if freqs is None:
+            current = torch.zeros_like(branch_index, dtype=torch.complex128)
+            current[V_index_mask] = V_current
+            # 注意：G_indices_all 是针对 branch_index 的索引
+            current.scatter_(0, G_indices_all, G_current)
+            current[I_index_mask] = I_current
+        else:
+            N = freqs.size(0)
+            M = branch_index.size(0)
+            current = torch.zeros((N, M), dtype=torch.complex128, device=self.V.device)
+            
+            current[:, V_index_mask] = V_current
+            current[:, I_index_mask] = I_current
+            
+            # G_indices_all 是相对于 branch_index 的索引
+            current[:, G_indices_all] = G_current
+
+        return current
+    
     def branch_voltage(self, branch_index: torch.Tensor) -> torch.Tensor:
         u = self.branch_u[branch_index] - 1
         v = self.branch_v[branch_index] - 1
@@ -135,6 +265,33 @@ class AcSimulation:
         voltage_v = torch.zeros_like(branch_index, dtype=torch.complex128)
         voltage_v[v >= 0] = self.V[v[v >= 0]]
         return voltage_u - voltage_v
+
+    def branch_voltage_batch(self, branch_index: torch.Tensor) -> torch.Tensor:
+        u = self.branch_u[branch_index] - 1
+        v = self.branch_v[branch_index] - 1
+        
+        if self.V.dim() == 1:
+            voltage_u = torch.zeros_like(branch_index, dtype=torch.complex128)
+            voltage_u[u >= 0] = self.V[u[u >= 0]]
+            voltage_v = torch.zeros_like(branch_index, dtype=torch.complex128)
+            voltage_v[v >= 0] = self.V[v[v >= 0]]
+            return voltage_u - voltage_v
+        else:
+            # Batch case: self.V is [N, n]
+            N = self.V.shape[0]
+            M = branch_index.shape[0]
+            
+            voltage_u = torch.zeros((N, M), dtype=torch.complex128, device=self.V.device)
+            valid_u = u >= 0
+            if valid_u.any():
+                voltage_u[:, valid_u] = self.V[:, u[valid_u]]
+            
+            voltage_v = torch.zeros((N, M), dtype=torch.complex128, device=self.V.device)
+            valid_v = v >= 0
+            if valid_v.any():
+                voltage_v[:, valid_v] = self.V[:, v[valid_v]]
+            
+            return voltage_u - voltage_v
 
 
 class AcSimulationScipy(AcSimulation):
@@ -307,37 +464,71 @@ class AcSimulationCuDSS(AcSimulation):
         branch_v: torch.Tensor,
         branch_value: torch.Tensor,
         freq: float = 1,
+        device: str = "cuda:0",
     ):
         super().__init__(branch_type, branch_u, branch_v, branch_value, freq)
+        self.device = torch.device(device)
 
-        self.cuDss = AcCuDssHandle()
-        acCuDssHandleInit(
-            self.cuDss, 
-            self.branch_typ, 
-            self.branch_u, 
-            self.branch_v, 
-            self.branch_val
-        )
+        with torch.cuda.device(self.device):
+            self.cuDss = AcCuDssHandle()
+            acCuDssHandleInit(
+                self.cuDss, 
+                self.branch_typ, 
+                self.branch_u, 
+                self.branch_v, 
+                self.branch_val
+            )
 
     def factorize(self):
-        acCuDssHandleFactorize(
-            self.cuDss,
-            # self.branch_typ,
-            # self.branch_u,
-            # self.branch_v,
-            self.branch_val,
-            self.freq,
-        )
+        with torch.cuda.device(self.device):
+            acCuDssHandleFactorize(
+                self.cuDss,
+                # self.branch_typ,
+                # self.branch_u,
+                # self.branch_v,
+                self.branch_val,
+                self.freq,
+            )
 
     def solve(self):
-        acCuDssHandleSolve(
-            self.cuDss,
-            # self.branch_typ,
-            # self.branch_u,
-            # self.branch_v,
-            self.branch_val,
-        )
-        self.V = acCuDssHandleGetSolution(self.cuDss)
+        with torch.cuda.device(self.device):
+            acCuDssHandleSolve(
+                self.cuDss,
+                # self.branch_typ,
+                # self.branch_u,
+                # self.branch_v,
+                self.branch_val,
+            )
+            self.V = acCuDssHandleGetSolution(self.cuDss)
+
+    def solve_batch(self, frequencies: torch.Tensor):
+        """
+        批量计算多个频率点的解。
+        frequencies: 1D Tensor of frequencies.
+        Returns: Tensor of shape [num_freqs, num_nodes] containing solution vectors (on GPU).
+        """
+        with torch.cuda.device(self.device):
+            return acCuDssHandleSolveBatch(
+                self.cuDss,
+                self.branch_val,
+                frequencies
+            )
+
+    def solve_batch_with_rhs(self, frequencies: torch.Tensor, rhs_batch: torch.Tensor):
+        """
+        批量计算 (带自定义 RHS)。
+        frequencies: [num_freqs]
+        rhs_batch: [num_freqs, num_nodes]
+        Returns: Tensor of shape [num_freqs, num_nodes]
+        """
+        with torch.cuda.device(self.device):
+            return acCuDssHandleSolveBatchWithRhs(
+                self.cuDss,
+                self.branch_val,
+                frequencies,
+                rhs_batch
+            )
+
 
     def __del__(self):
         acCuDssHandleTerminate(self.cuDss)
