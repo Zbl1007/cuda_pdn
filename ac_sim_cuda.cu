@@ -148,12 +148,13 @@ __global__ void count_triplets_kernel(
     int typ = typs[i];
 
     // (这个 'if' 结构必须与 build_triplets_kernel 中的逻辑完全一致)
-    if (typ == 1) { // 电压源
+    if (typ == BR_V) { // 电压源
         int u = us[i] - 1;
         int v = vs[i] - 1;
         if (u >= 0) local_count++;
         if (v >= 0) local_count++;
-    } else if (typ >= 3) { // 无源元件 (G, R, C, L, ...)
+    } else if (typ == BR_G || typ == BR_R || typ == BR_C || typ == BR_L ||
+             typ == BR_XC || typ == BR_XL) { // 无源元件 (G, R, C, L, ...)
         int u = min(us[i], vs[i]) - 1;
         int v = max(us[i], vs[i]) - 1;
         if (u >= 0) local_count++;
@@ -278,7 +279,7 @@ struct ComplexAdd {
 // -----------------------------------------------------------------
 // ----------------- 主机端函数 (已重构) ---------------------------
 // -----------------------------------------------------------------
-void initTripletsGPU_thrust(
+int initTripletsGPU_thrust(
     int m,
     const int* d_typs,
     const int* d_us,
@@ -306,7 +307,7 @@ void initTripletsGPU_thrust(
         h_maxnode = max(max_u, max_v);
     }
     
-    int threads = 1024;
+    int threads = 512;
     int blocks = (m + threads - 1)/threads;
 
     // ---------------------------------------------------
@@ -393,7 +394,7 @@ void initTripletsGPU_thrust(
     // --- 步骤 7: 清理 ---
     // ---------------------------------------------------
     cudaFree(d_raw);
-    // return out_n;
+    return out_n;
 
     // (d_counts, d_offsets, d_keys 等都是 device_vector，会自动释放)
 }
@@ -866,10 +867,10 @@ void acCuDssHandleFactorize(AcCuDssHandle &h,
     // std::vector<int> out_rows, out_cols;
     // std::vector<cuDoubleComplex> out_vals;
     // std::cout << "Coalesced triplet count: " <<  std::endl;
-    int nnz_computed = 0; 
+    // int nnz_computed = 0; 
     // CUDA_CHECK(cudaMemcpy(h.d_branch_vals, branch_val.data_ptr<c10::complex<double>>(), h.m * sizeof(cuDoubleComplex), cudaMemcpyHostToDevice));
 
-    initTripletsGPU_thrust(
+    int nnz_computed = initTripletsGPU_thrust(
         m,
         h.d_branch_typs,
         h.d_branch_us,
@@ -887,6 +888,10 @@ void acCuDssHandleFactorize(AcCuDssHandle &h,
 
 
     // --- 步骤 3: 安全检查 ---
+    if (h.nnz != nnz_computed) {
+      std::cout << "FATAL ERROR: CPU nnz (" << h.nnz << ") != GPU nnz ("
+                << nnz_computed << ")" << std::endl;
+    }
     // if (h.nnz != nnz_computed) {
     //     throw std::runtime_error("FATAL: Matrix structure (NNZ) changed.");
     // }
@@ -930,6 +935,8 @@ void acCuDssHandleFactorize(AcCuDssHandle &h,
     // print_gpu_array("h.d_a", h.d_a, h.nnz);
     // exit(0);
     // // std::cout<<"okok success!"<<std::endl;
+    // print_gpu_array("h.d_a", h.d_a, h.nnz);
+    // exit(0);
 
     // CUDA_CHECK(cudaGetLastError()); // 检查 Kernel 启动是否有错
     // --- 3. 调用 cuDSS Factorization ---
@@ -972,7 +979,7 @@ void acCuDssHandleSolve(AcCuDssHandle &h,
     // // }
 
     // --- 1. 定义 CUDA Kernel 的启动配置 ---
-    int threads_per_block = 1024;
+    int threads_per_block = 512;
     // RHS kernel 需要清零和原子加，网格大小可以设置得大一些以保证并行度
     int blocks_per_grid = (h.m + threads_per_block - 1) / threads_per_block;
     // --- 2. 启动 Kernel 直接在 GPU 上更新 RHS 向量 ---
