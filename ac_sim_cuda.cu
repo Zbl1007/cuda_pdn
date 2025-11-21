@@ -166,6 +166,14 @@ __global__ void count_triplets_kernel(
     out_counts[i] = local_count;
 }
 
+// --- (pack_key, unpack_key, ComplexAdd 保持不变) ---
+__host__ __device__ inline uint64_t pack_key(int row, int col) {
+    return ( (uint64_t)( (uint32_t)row ) << 32 ) | (uint64_t)( (uint32_t)col );
+}
+__host__ __device__ inline void unpack_key(uint64_t key, int &row, int &col) {
+    row = (int)( (key >> 32) & 0xFFFFFFFFu );
+    col = (int)( key & 0xFFFFFFFFu );
+}
 
 // -----------------------------------------------------------------
 // ----------------- 内核 2: 写入 (第 2 趟) ------------------------
@@ -178,7 +186,9 @@ __global__ void build_triplets_kernel(
     const int* vs,
     const cuDoubleComplex* vals,
     double freq,
-    Triplet_GPU* out_triplets, // 输出：紧凑的三元组数组
+    // Triplet_GPU* out_triplets, // 输出：紧凑的三元组数组
+    uint64_t *out_keys,
+    cuDoubleComplex *out_vals, // 输出：键值对数组
     const int* d_offsets, // 输入：每个 branch 的写入偏移量
     int num_nonzero_nodes)
 {
@@ -210,29 +220,35 @@ __global__ void build_triplets_kernel(
 
         if (u >= 0) {
             int pos = my_base_offset + local_write_count; // 精确索引
-            out_triplets[pos].row = u;
-            out_triplets[pos].col = u;
-            out_triplets[pos].val = g;
-            out_triplets[pos].idx = i;
-            out_triplets[pos].sign = +1.0;
+            // out_triplets[pos].row = u;
+            // out_triplets[pos].col = u;
+            // out_triplets[pos].val = g;
+            // out_triplets[pos].idx = i;
+            // out_triplets[pos].sign = +1.0;
+            out_keys[pos] = pack_key(u, u);
+            out_vals[pos] = g;
             local_write_count++;
         }
         if (v >= 0) {
             int pos = my_base_offset + local_write_count;
-            out_triplets[pos].row = v;
-            out_triplets[pos].col = v;
-            out_triplets[pos].val = g;
-            out_triplets[pos].idx = i;
-            out_triplets[pos].sign = +1.0;
+            // out_triplets[pos].row = v;
+            // out_triplets[pos].col = v;
+            // out_triplets[pos].val = g;
+            // out_triplets[pos].idx = i;
+            // out_triplets[pos].sign = +1.0;
+            out_keys[pos] = pack_key(v, v);
+            out_vals[pos] = g;
             local_write_count++;
         }
         if (u >= 0 && v >= 0) {
             int pos = my_base_offset + local_write_count;
-            out_triplets[pos].row = u;
-            out_triplets[pos].col = v;
-            out_triplets[pos].val = make_cuDoubleComplex(-g.x, -g.y);
-            out_triplets[pos].idx = i;
-            out_triplets[pos].sign = -1.0;
+            // out_triplets[pos].row = u;
+            // out_triplets[pos].col = v;
+            // out_triplets[pos].val = make_cuDoubleComplex(-g.x, -g.y);
+            // out_triplets[pos].idx = i;
+            // out_triplets[pos].sign = -1.0;
+            out_keys[pos] = pack_key(u, v);
+            out_vals[pos] = make_cuDoubleComplex(-g.x, -g.y);
             local_write_count++;
         }
     } else { // 电压源
@@ -240,35 +256,30 @@ __global__ void build_triplets_kernel(
         int v = vs[i] - 1;
         if (u >= 0) {
             int pos = my_base_offset + local_write_count;
-            out_triplets[pos].row = u;
-            out_triplets[pos].col = i + num_nonzero_nodes;
-            out_triplets[pos].val = make_cuDoubleComplex(1.0, 0.0);
-            out_triplets[pos].idx = i;
-            out_triplets[pos].sign = +1.0;
+            // out_triplets[pos].row = u;
+            // out_triplets[pos].col = i + num_nonzero_nodes;
+            // out_triplets[pos].val = make_cuDoubleComplex(1.0, 0.0);
+            // out_triplets[pos].idx = i;
+            // out_triplets[pos].sign = +1.0;
+            out_keys[pos] = pack_key(u, i + num_nonzero_nodes);
+            out_vals[pos] = make_cuDoubleComplex(1.0, 0.0);
             local_write_count++;
         }
         if (v >= 0) {
             int pos = my_base_offset + local_write_count;
-            out_triplets[pos].row = v;
-            out_triplets[pos].col = i + num_nonzero_nodes;
-            out_triplets[pos].val = make_cuDoubleComplex(-1.0, 0.0);
-            out_triplets[pos].idx = i;
-            out_triplets[pos].sign = -1.0;
+            // out_triplets[pos].row = v;
+            // out_triplets[pos].col = i + num_nonzero_nodes;
+            // out_triplets[pos].val = make_cuDoubleComplex(-1.0, 0.0);
+            // out_triplets[pos].idx = i;
+            // out_triplets[pos].sign = -1.0;
+            out_keys[pos] = pack_key(v, i + num_nonzero_nodes);
+            out_vals[pos] = make_cuDoubleComplex(-1.0, 0.0);
             local_write_count++;
         }
     }
     // (不再需要 'for' 循环来写 -1)
 }
 
-
-// --- (pack_key, unpack_key, ComplexAdd 保持不变) ---
-__host__ __device__ inline uint64_t pack_key(int row, int col) {
-    return ( (uint64_t)( (uint32_t)row ) << 32 ) | (uint64_t)( (uint32_t)col );
-}
-__host__ __device__ inline void unpack_key(uint64_t key, int &row, int &col) {
-    row = (int)( (key >> 32) & 0xFFFFFFFFu );
-    col = (int)( key & 0xFFFFFFFFu );
-}
 struct ComplexAdd {
     __host__ __device__ cuDoubleComplex operator()(const cuDoubleComplex &a, const cuDoubleComplex &b) const {
         return make_cuDoubleComplex(a.x + b.x, a.y + b.y);
@@ -344,13 +355,20 @@ int initTripletsGPU_thrust(
     // ---------------------------------------------------
     // --- 步骤 4: 分配 *精确* 内存并执行第 2 趟 (写入) ---
     // ---------------------------------------------------
-    Triplet_GPU* d_raw = nullptr;
-    cudaMalloc(&d_raw, sizeof(Triplet_GPU) * h_count); // <-- 分配紧凑的内存
-
+    // Triplet_GPU* d_raw = nullptr;
+    // CUDA_CHECK(cudaMalloc(&d_raw, sizeof(Triplet_GPU) * h_count)); // <-- 分配紧凑的内存
+    // 2) 创建 device vectors (大小为 h_count)
+    thrust::device_vector<uint64_t> d_keys(h_count);
+    thrust::device_vector<cuDoubleComplex> d_vals_vec(h_count);
+    
     build_triplets_kernel<<<blocks, threads>>>(
         m, d_typs, d_us, d_vs, d_vals, freq, 
-        d_raw, // 写入紧凑的数组
-        thrust::raw_pointer_cast(d_offsets.data()), // 传入偏移量
+        // d_raw, // 写入紧凑的数组
+        // thrust::raw_pointer_cast(d_offsets.data()), // 传入偏移量
+        // h_maxnode
+        thrust::raw_pointer_cast(d_keys.data()),
+        thrust::raw_pointer_cast(d_vals_vec.data()),
+        thrust::raw_pointer_cast(d_offsets.data()), 
         h_maxnode
     );
     cudaDeviceSynchronize();
@@ -359,15 +377,15 @@ int initTripletsGPU_thrust(
     // --- 步骤 5: 打包、排序、归约 (与之前相同) ---
     // ---------------------------------------------------
     
-    // 2) 创建 device vectors (大小为 h_count)
-    thrust::device_vector<uint64_t> d_keys(h_count);
-    thrust::device_vector<cuDoubleComplex> d_vals_vec(h_count);
+    // // 2) 创建 device vectors (大小为 h_count)
+    // thrust::device_vector<uint64_t> d_keys(h_count);
+    // thrust::device_vector<cuDoubleComplex> d_vals_vec(h_count);
 
-    // 3) 启动打包内核 (大小为 h_count)
-    int b2 = (h_count + threads - 1)/threads;
-    extern __global__ void fill_triplet_arrays_kernel(const Triplet_GPU* raw, uint64_t* keys, cuDoubleComplex* vals, int n);
-    fill_triplet_arrays_kernel<<<b2, threads>>>(d_raw, thrust::raw_pointer_cast(d_keys.data()), thrust::raw_pointer_cast(d_vals_vec.data()), h_count);
-    cudaDeviceSynchronize();
+    // // 3) 启动打包内核 (大小为 h_count)
+    // int b2 = (h_count + threads - 1)/threads;
+    // extern __global__ void fill_triplet_arrays_kernel(const Triplet_GPU* raw, uint64_t* keys, cuDoubleComplex* vals, int n);
+    // fill_triplet_arrays_kernel<<<b2, threads>>>(d_raw, thrust::raw_pointer_cast(d_keys.data()), thrust::raw_pointer_cast(d_vals_vec.data()), h_count);
+    // cudaDeviceSynchronize();
 
     // 4) 排序
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_vals_vec.begin());
@@ -393,7 +411,7 @@ int initTripletsGPU_thrust(
     // ---------------------------------------------------
     // --- 步骤 7: 清理 ---
     // ---------------------------------------------------
-    cudaFree(d_raw);
+    // cudaFree(d_raw);
     return out_n;
 
     // (d_counts, d_offsets, d_keys 等都是 device_vector，会自动释放)
@@ -454,71 +472,71 @@ __global__ void fill_triplet_arrays_kernel(const Triplet_GPU* raw, uint64_t* key
 //     int typ = typs[i];
 // }
 
-__global__ void update_matrix_values_kernel(
-    cuDoubleComplex* d_a,                  // 要更新的矩阵数值 (输出)
-    int nnz,                               // 矩阵非零元数量
-    const int* d_branch_indices_for_nnz,   // 映射：每个非零元来自哪个 branch
-    double freq,                           // 当前频率
-    const int* d_branch_typs,              // branch 类型
-    const int* d_us,              // 节点u
-    const int* d_vs,              // 节点v
-    const cuDoubleComplex* d_branch_vals,   // branch 基础值 (电容值/电感值等)
-    const double* d_signs_for_nnz           // <--- 新增参数：符号指令单
-) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= nnz) return;
-    int branch_idx = d_branch_indices_for_nnz[idx];
+// __global__ void update_matrix_values_kernel(
+//     cuDoubleComplex* d_a,                  // 要更新的矩阵数值 (输出)
+//     int nnz,                               // 矩阵非零元数量
+//     const int* d_branch_indices_for_nnz,   // 映射：每个非零元来自哪个 branch
+//     double freq,                           // 当前频率
+//     const int* d_branch_typs,              // branch 类型
+//     const int* d_us,              // 节点u
+//     const int* d_vs,              // 节点v
+//     const cuDoubleComplex* d_branch_vals,   // branch 基础值 (电容值/电感值等)
+//     const double* d_signs_for_nnz           // <--- 新增参数：符号指令单
+// ) {
+//     int idx = blockIdx.x * blockDim.x + threadIdx.x;
+//     if (idx >= nnz) return;
+//     int branch_idx = d_branch_indices_for_nnz[idx];
 
 
 
-    int branch_type = d_branch_typs[branch_idx];
-    int u = std::min(d_us[branch_idx], d_vs[branch_idx]) - 1;
-    int v = std::max(d_us[branch_idx], d_vs[branch_idx]) - 1;
+//     int branch_type = d_branch_typs[branch_idx];
+//     int u = std::min(d_us[branch_idx], d_vs[branch_idx]) - 1;
+//     int v = std::max(d_us[branch_idx], d_vs[branch_idx]) - 1;
 
-    cuDoubleComplex base_val = d_branch_vals[branch_idx];
+//     cuDoubleComplex base_val = d_branch_vals[branch_idx];
     
-    cuDoubleComplex jomega = make_cuDoubleComplex(0.0, 2.0 * PI * freq);
-    cuDoubleComplex val_out = make_cuDoubleComplex(0.0, 0.0);
+//     cuDoubleComplex jomega = make_cuDoubleComplex(0.0, 2.0 * PI * freq);
+//     cuDoubleComplex val_out = make_cuDoubleComplex(0.0, 0.0);
 
-    switch (branch_type) {
-        case BR_V:
-            val_out = make_cuDoubleComplex(1.0, 0.0); // 假设电压源相关值为 +/- 1
-            // d_a[idx] = make_cuDoubleComplex(d_signs_for_nnz[idx], 0.0);
-            // return;
-            break;
-        case BR_G:
-            val_out = base_val;
-            break;
-        case BR_R:
-            val_out = make_cuDoubleComplex(1.0 / base_val.x, 0.0);
-            printf("base_val.x:%.12lf  base_val.y:%.12lf",base_val.x, base_val.y);
-            break;
-        case BR_C:
-            // val_out = jomega * base_val
-            val_out = cuCmul(jomega, base_val);
-            break;
-        case BR_L:
-             // val_out = 1.0 / (jomega * base_val)
-            val_out = cuCdiv(make_cuDoubleComplex(1.0, 0.0), cuCmul(jomega, base_val));
-            break;
-        case BR_XC:
-             // val_out = jomega / base_val
-            val_out = cuCdiv(jomega, base_val);
-            break;
-        case BR_XL:
-             // val_out = 1.0 / jomega * base_val
-            val_out = cuCmul(cuCdiv(make_cuDoubleComplex(1.0, 0.0), jomega), base_val);
-            break;
-    }
+//     switch (branch_type) {
+//         case BR_V:
+//             val_out = make_cuDoubleComplex(1.0, 0.0); // 假设电压源相关值为 +/- 1
+//             // d_a[idx] = make_cuDoubleComplex(d_signs_for_nnz[idx], 0.0);
+//             // return;
+//             break;
+//         case BR_G:
+//             val_out = base_val;
+//             break;
+//         case BR_R:
+//             val_out = make_cuDoubleComplex(1.0 / base_val.x, 0.0);
+//             printf("base_val.x:%.12lf  base_val.y:%.12lf",base_val.x, base_val.y);
+//             break;
+//         case BR_C:
+//             // val_out = jomega * base_val
+//             val_out = cuCmul(jomega, base_val);
+//             break;
+//         case BR_L:
+//              // val_out = 1.0 / (jomega * base_val)
+//             val_out = cuCdiv(make_cuDoubleComplex(1.0, 0.0), cuCmul(jomega, base_val));
+//             break;
+//         case BR_XC:
+//              // val_out = jomega / base_val
+//             val_out = cuCdiv(jomega, base_val);
+//             break;
+//         case BR_XL:
+//              // val_out = 1.0 / jomega * base_val
+//             val_out = cuCmul(cuCdiv(make_cuDoubleComplex(1.0, 0.0), jomega), base_val);
+//             break;
+//     }
     
-    // 注意：您需要在 initTriplets 中处理好 +/- 符号
-    // 这个 kernel 只计算导纳的绝对值
-    // d_a[idx] = val_out;
-    printf("branch_type:%d  val_out = (%.12lf, %.12lf)\n",branch_type, val_out.x, val_out.y);
+//     // 注意：您需要在 initTriplets 中处理好 +/- 符号
+//     // 这个 kernel 只计算导纳的绝对值
+//     // d_a[idx] = val_out;
+//     printf("branch_type:%d  val_out = (%.12lf, %.12lf)\n",branch_type, val_out.x, val_out.y);
 
-    double sign = d_signs_for_nnz[idx];
-    d_a[idx] = make_cuDoubleComplex(val_out.x * sign, val_out.y * sign);
-}
+//     double sign = d_signs_for_nnz[idx];
+//     d_a[idx] = make_cuDoubleComplex(val_out.x * sign, val_out.y * sign);
+// }
 
 __global__ void update_rhs_kernel(
     cuDoubleComplex* d_b,                 // 要更新的 RHS 向量 (输出)
@@ -685,8 +703,8 @@ struct AcCuDssHandle {
 
   // === 新增：在 GPU 上存储电路基础信息 ===
   // 映射关系：h.ts 中第 k 个元素的值，应该由哪个 branch 计算得到
-  int* d_branch_indices_for_nnz = nullptr;
-  double* d_signs_for_nnz = nullptr;
+  // int* d_branch_indices_for_nnz = nullptr;
+  // double* d_signs_for_nnz = nullptr;
 
   
   // 电路 branch 的基础信息
@@ -768,8 +786,8 @@ void acCuDssHandleInit(AcCuDssHandle &h, const at::Tensor &branch_typ,
   CUDA_CHECK(cudaMalloc((void **)&h.d_b,  h.n * sizeof(cuDoubleComplex)));   // 为RHS预留空间
   CUDA_CHECK(cudaMalloc((void **)&h.d_x,  h.n * sizeof(cuDoubleComplex)));   // 为解预留空间
 
-  CUDA_CHECK(cudaMalloc((void **)&h.d_branch_indices_for_nnz, h.nnz * sizeof(int)));
-  CUDA_CHECK(cudaMalloc((void **)&h.d_signs_for_nnz, h.nnz * sizeof(double))); // <--- 为符号数组分配显存
+  // CUDA_CHECK(cudaMalloc((void **)&h.d_branch_indices_for_nnz, h.nnz * sizeof(int)));
+  // CUDA_CHECK(cudaMalloc((void **)&h.d_signs_for_nnz, h.nnz * sizeof(double))); // <--- 为符号数组分配显存
   CUDA_CHECK(cudaMalloc((void **)&h.d_branch_typs, h.m * sizeof(int)));
   CUDA_CHECK(cudaMalloc((void **)&h.d_branch_us,   h.m * sizeof(int)));
   CUDA_CHECK(cudaMalloc((void **)&h.d_branch_vs,   h.m * sizeof(int)));
@@ -779,8 +797,8 @@ void acCuDssHandleInit(AcCuDssHandle &h, const at::Tensor &branch_typ,
   // --- 拷贝数据到GPU ---
   CUDA_CHECK(cudaMemcpy(h.d_ia, h_ia.data(), (h.n + 1) * sizeof(int), cudaMemcpyHostToDevice));
   CUDA_CHECK(cudaMemcpy(h.d_ja, h_ja.data(), h.nnz * sizeof(int), cudaMemcpyHostToDevice));
-  CUDA_CHECK(cudaMemcpy(h.d_branch_indices_for_nnz, h_branch_indices_for_nnz.data(), h.nnz * sizeof(int), cudaMemcpyHostToDevice));
-  CUDA_CHECK(cudaMemcpy(h.d_signs_for_nnz, h_signs_for_nnz.data(), h.nnz * sizeof(double), cudaMemcpyHostToDevice)); // <--- 拷贝符号数组
+  // CUDA_CHECK(cudaMemcpy(h.d_branch_indices_for_nnz, h_branch_indices_for_nnz.data(), h.nnz * sizeof(int), cudaMemcpyHostToDevice));
+  // CUDA_CHECK(cudaMemcpy(h.d_signs_for_nnz, h_signs_for_nnz.data(), h.nnz * sizeof(double), cudaMemcpyHostToDevice)); // <--- 拷贝符号数组
 
 
   CUDA_CHECK(cudaMemcpy(h.d_branch_typs, branch_typ.data_ptr<int>(), h.m * sizeof(int), cudaMemcpyHostToDevice));
@@ -1042,7 +1060,6 @@ void acCuDssHandleSolve(AcCuDssHandle &h,
     // // ==============================================================
     // // =============         调试代码结束           =================
     // // ==============================================================
-
     // --- 3. 调用 cuDSS Solve ---
     CUDSS_CHECK(cudssExecute(h.handle, CUDSS_PHASE_SOLVE, h.config, h.data, h.matA, h.vecX, h.vecB));
 
@@ -1050,7 +1067,6 @@ void acCuDssHandleSolve(AcCuDssHandle &h,
     h.h_x.resize(h.n);
     CUDA_CHECK(cudaMemcpy(reinterpret_cast<cuDoubleComplex*>(h.h_x.data()), h.d_x, 
                           h.n * sizeof(cuDoubleComplex), cudaMemcpyDeviceToHost));
-
 }
 
 at::Tensor acCuDssHandleGetSolution(AcCuDssHandle &h) {
